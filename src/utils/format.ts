@@ -38,6 +38,13 @@ export function formatGenres(genres?: string[]): string {
   return genres.filter(Boolean).slice(0, 6).join(' • ') || 'N/A';
 }
 
+export function formatInlineGenres(genres?: string[]): string {
+  if (!genres || genres.length === 0) {
+    return 'N/A';
+  }
+  return genres.filter(Boolean).slice(0, 3).join(' • ') || 'N/A';
+}
+
 export function formatYear(year?: number | string): string {
   if (!year) {
     return 'TBD';
@@ -133,9 +140,13 @@ function buildCastHtml(cast: TraktCastEntry[]): string {
   return members.length > 0 ? members.join(' ') : 'No cast available';
 }
 
-function buildTraktLine(type: 'movie' | 'show', ids?: TraktIds): string {
-  const url = formatTraktUrl(type, ids ?? {});
-  return `<a href="${escapeHtml(url)}">🎬 Trakt</a>`;
+export function buildTraktReplyMarkup(
+  type: 'movie' | 'show',
+  ids?: TraktIds
+): { inline_keyboard: Array<Array<{ text: string; url: string }>> } {
+  return {
+    inline_keyboard: [[{ text: '🎬 Open on Trakt', url: formatTraktUrl(type, ids ?? {}) }]],
+  };
 }
 
 export function buildMessageCaption(item: TraktSearchItem, cast: TraktCastEntry[]): string {
@@ -146,8 +157,6 @@ export function buildMessageCaption(item: TraktSearchItem, cast: TraktCastEntry[
   const genres = formatGenres(meta?.genres ?? []);
   const overview = escapeHtml(meta?.overview ?? 'No overview available.');
   const castHtml = buildCastHtml(cast);
-  const resultType = item.type === 'movie' || item.type === 'show' ? item.type : 'movie';
-  const traktLine = buildTraktLine(resultType, meta?.ids);
 
   return [
     `<b>${title}</b> <i>(${year})</i>`,
@@ -158,16 +167,21 @@ export function buildMessageCaption(item: TraktSearchItem, cast: TraktCastEntry[
     `\n> ${castHtml}`,
     `📝 Overview`,
     `\n> <tg-spoiler>${overview}</tg-spoiler>`,
-    traktLine,
   ].join('\n');
 }
 
-export function buildResultDescription(item: TraktSearchItem): string {
+export function buildInlineResultTitle(item: TraktSearchItem): string {
   const meta = item.movie ?? item.show;
-  const title = escapeHtml(meta?.title ?? meta?.name ?? 'Unknown');
-  const year = formatYear(getItemYear(meta));
+  const title = meta?.title ?? meta?.name ?? 'Unknown';
+  const year = formatYear(getItemYear(item));
+  return truncate(`${title} (${year})`, 64);
+}
+
+export function buildInlineResultDescription(item: TraktSearchItem): string {
+  const meta = item.movie ?? item.show;
   const rating = formatRating(meta?.rating as number | undefined);
-  return `${title} · ${year} · ⭐ IMDb ${rating}`;
+  const genres = formatInlineGenres(meta?.genres);
+  return truncate(`⭐ IMDb ${rating} 🎭 ${genres}`, 255);
 }
 
 export function buildEmptyInlineResponse(query: string) {

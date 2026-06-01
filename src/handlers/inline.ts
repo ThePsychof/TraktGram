@@ -1,19 +1,20 @@
 import type { Bot } from 'grammy';
 import type {
+  InlineKeyboardMarkup,
   InlineQueryResult,
   InlineQueryResultArticle,
-  InlineQueryResultPhoto,
+  LinkPreviewOptions,
 } from '@grammyjs/types';
-import type { TraktCastEntry, TraktSearchItem } from '../types/trakt';
+import type { TraktSearchItem } from '../types/trakt';
 import type { TraktService } from '../services/trakt';
 import logger from '../utils/logger';
 import {
   buildEmptyInlineResponse,
+  buildInlineResultDescription,
+  buildInlineResultTitle,
   buildMessageCaption,
-  buildResultDescription,
+  buildTraktReplyMarkup,
   escapeHtml,
-  formatYear,
-  getItemYear,
   getPosterUrlFromItem,
 } from '../utils/format';
 
@@ -23,23 +24,15 @@ function getResultId(item: TraktSearchItem, index: number): string {
   return `${item.type}-${uniqueId}`;
 }
 
-function buildPhotoResult(
-  id: string,
-  title: string,
-  description: string,
-  photoUrl: string,
-  caption: string
-): InlineQueryResultPhoto {
+function buildLinkPreviewOptions(posterUrl?: string): LinkPreviewOptions {
+  if (!posterUrl) {
+    return { is_disabled: true };
+  }
+
   return {
-    type: 'photo',
-    id,
-    photo_url: photoUrl,
-    thumbnail_url: photoUrl,
-    title,
-    description,
-    caption,
-    parse_mode: 'HTML',
-    show_caption_above_media: true,
+    url: posterUrl,
+    prefer_large_media: true,
+    show_above_text: true,
   };
 }
 
@@ -48,18 +41,23 @@ function buildArticleResult(
   title: string,
   description: string,
   messageText: string,
-  thumbUrl?: string
+  posterUrl?: string,
+  replyMarkup?: InlineKeyboardMarkup
 ): InlineQueryResultArticle {
   return {
     type: 'article',
     id,
     title,
     description,
-    thumbnail_url: thumbUrl,
+    thumbnail_url: posterUrl,
+    thumbnail_width: 46,
+    thumbnail_height: 69,
     input_message_content: {
       message_text: messageText,
       parse_mode: 'HTML',
+      link_preview_options: buildLinkPreviewOptions(posterUrl),
     },
+    reply_markup: replyMarkup,
   };
 }
 
@@ -67,21 +65,18 @@ async function resolveInlineResult(
   item: TraktSearchItem,
   index: number,
   traktService: TraktService
-) {
+): Promise<InlineQueryResultArticle> {
   const id = getResultId(item, index);
   const meta = item.movie ?? item.show;
-  const title = meta?.title ?? meta?.name ?? 'Untitled';
-  const year = formatYear(getItemYear(item));
-  const description = buildResultDescription(item);
+  const resultType = item.type === 'movie' || item.type === 'show' ? item.type : 'movie';
+  const title = buildInlineResultTitle(item);
+  const description = buildInlineResultDescription(item);
   const cast = await traktService.getCastForItem(item);
   const caption = buildMessageCaption(item, cast);
   const posterUrl = getPosterUrlFromItem(item);
+  const replyMarkup = buildTraktReplyMarkup(resultType, meta?.ids);
 
-  if (posterUrl) {
-    return buildPhotoResult(id, title, description, posterUrl, caption);
-  }
-
-  return buildArticleResult(id, title, description, caption, undefined);
+  return buildArticleResult(id, title, description, caption, posterUrl, replyMarkup);
 }
 
 export function registerInlineQuery(
