@@ -22,6 +22,7 @@ export class TraktService {
     return {
       Accept: 'application/json',
       'Content-Type': 'application/json',
+      'User-Agent': 'TraktGram/1.0',
       'trakt-api-version': '2',
       'trakt-api-key': this.apiKey,
     } as Record<string, string>;
