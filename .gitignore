@@ -1,6 +1,5 @@
 # dependencies
 node_modules/
-package-lock.json
 
 # local tooling
 .tools/
@@ -28,5 +27,4 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 .env.example
-DEPLOY.sh
 DEPLOYMENT_GUIDE.md
