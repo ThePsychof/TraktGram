@@ -77,7 +77,7 @@ export class TraktService {
   }
 
   async getTrendingMovies(limit = 5): Promise<TraktTrendingItem[]> {
-    return await this.request<TraktTrendingItem[]>(`/movies/trending?limit=${limit}`);
+    return await this.request<TraktTrendingItem[]>(`/movies/trending?limit=${limit}&extended=full,images`);
   }
 
   private getItemPath(ids: TraktIds | undefined): string | null {
@@ -115,7 +115,7 @@ export class TraktService {
 
   private async searchEndpoint(type: 'movie' | 'show', query: string, limit: number): Promise<TraktSearchItem[]> {
     const encoded = encodeURIComponent(query);
-    return await this.request<TraktSearchItem[]>(`/search/${type}?query=${encoded}&limit=${limit}&extended=full`);
+    return await this.request<TraktSearchItem[]>(`/search/${type}?query=${encoded}&limit=${limit}&extended=full,images`);
   }
 
   async searchMulti(query: string, limit = 10): Promise<TraktSearchItem[]> {

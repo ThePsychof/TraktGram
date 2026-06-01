@@ -8,16 +8,17 @@ export interface TraktIds {
   tvdb?: number;
 }
 
-export interface TraktImageSize {
+export type TraktImageSize = string | string[] | {
   full?: string;
   thumb?: string;
   medium?: string;
-}
+};
 
 export interface TraktImages {
   poster?: TraktImageSize;
   fanart?: TraktImageSize;
   banner?: TraktImageSize;
+  thumb?: TraktImageSize;
 }
 
 export interface TraktMovieBase {

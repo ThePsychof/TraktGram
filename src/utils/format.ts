@@ -1,6 +1,7 @@
 import type {
   TraktCastEntry,
   TraktIds,
+  TraktImageSize,
   TraktMovieBase,
   TraktSearchItem,
   TraktShowBase,
@@ -55,14 +56,37 @@ export function formatTraktUrl(type: 'movie' | 'show', ids: Record<string, unkno
   return 'https://trakt.tv';
 }
 
+function normalizeTraktImageUrl(value?: TraktImageSize): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  let url: string | undefined;
+  if (Array.isArray(value)) {
+    url = value[0];
+  } else if (typeof value === 'string') {
+    url = value;
+  } else {
+    url = value.full ?? value.medium ?? value.thumb;
+  }
+
+  if (!url) {
+    return undefined;
+  }
+
+  if (!/^https?:\/\//i.test(url)) {
+    return `https://${url.replace(/^\/\//, '')}`;
+  }
+
+  return url;
+}
+
 export function getPosterUrlFromItem(item: TraktSearchItem): string | undefined {
   const meta = item.movie ?? item.show;
   return (
-    meta?.images?.poster?.full ||
-    meta?.images?.poster?.thumb ||
-    meta?.images?.fanart?.full ||
-    meta?.images?.fanart?.thumb ||
-    undefined
+    normalizeTraktImageUrl(meta?.images?.poster) ||
+    normalizeTraktImageUrl(meta?.images?.fanart) ||
+    normalizeTraktImageUrl(meta?.images?.thumb)
   );
 }
 
