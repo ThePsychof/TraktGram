@@ -170,8 +170,7 @@ export function buildMessageCaption(item: TraktSearchItem, cast: TraktCastEntry[
     `🎬 Cast`,
     ...castLines,
     ``,
-    `📝 Overview`,
-    `<tg-spoiler>${overview}</tg-spoiler>`,
+    `📝 <tg-spoiler>${overview}</tg-spoiler>`,
   ].join('\n');
 }
 
