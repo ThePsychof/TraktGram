@@ -1,5 +1,9 @@
 # dependencies
 node_modules/
+package-lock.json
+
+# local tooling
+.tools/
 
 # build output
 dist/
