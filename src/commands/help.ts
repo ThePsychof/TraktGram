@@ -9,6 +9,7 @@ export function registerHelp(bot: Bot) {
       '/ping - Respond with pong',
       '/help - Show this help',
       '/trending - Show top 5 trending movies from Trakt',
+      '\n*Inline mode:* Type `@TraktGramBot <movie or show>` anywhere to search Trakt instantly.',
     ].join('\n');
 
     await ctx.reply(msg, { parse_mode: 'Markdown' });
