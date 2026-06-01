@@ -5,8 +5,8 @@ import logger from './utils/logger';
 
 interface CloudflareEnv {
   BOT_TOKEN: string;
-  TRAKT_API_KEY: string;
-  TRAKT_API_SECRET?: string;
+  TRAKT_CLIENT_ID: string;
+  TRAKT_CLIENT_SECRET?: string;
   WEBHOOK_SECRET?: string;
 }
 
@@ -33,7 +33,7 @@ export default {
     }
 
     if (!bot || botToken !== env.BOT_TOKEN) {
-      const traktService = new TraktService(env.TRAKT_API_KEY);
+      const traktService = new TraktService(env.TRAKT_CLIENT_ID);
       bot = createBot(env.BOT_TOKEN, traktService);
       botToken = env.BOT_TOKEN;
       await bot.init();

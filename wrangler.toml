@@ -17,4 +17,4 @@ name = "traktgram-staging"
 # preview_id = "your-preview-id"
 
 # Environment variables are set via wrangler secret set command
-# These include: BOT_TOKEN, TRAKT_API_KEY, TRAKT_API_SECRET, WEBHOOK_SECRET
+# These include: BOT_TOKEN, TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET, WEBHOOK_SECRET
