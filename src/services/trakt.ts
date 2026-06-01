@@ -1,6 +1,12 @@
 import { SimpleCache } from '../utils/cache';
 import logger from '../utils/logger';
-import type { TraktSearchItem, TraktTrendingItem } from '../types/trakt';
+import type {
+  TraktCastEntry,
+  TraktIds,
+  TraktPeopleResponse,
+  TraktSearchItem,
+  TraktTrendingItem,
+} from '../types/trakt';
 
 /*
   TraktService: encapsulates all Trakt API communication.
@@ -72,6 +78,39 @@ export class TraktService {
 
   async getTrendingMovies(limit = 5): Promise<TraktTrendingItem[]> {
     return await this.request<TraktTrendingItem[]>(`/movies/trending?limit=${limit}`);
+  }
+
+  private getItemPath(ids: TraktIds | undefined): string | null {
+    if (!ids) {
+      return null;
+    }
+    if (typeof ids.trakt === 'number') {
+      return String(ids.trakt);
+    }
+    if (typeof ids.slug === 'string' && ids.slug.length > 0) {
+      return encodeURIComponent(ids.slug);
+    }
+    return null;
+  }
+
+  private async getPeople(type: 'movie' | 'show', ids: TraktIds | undefined): Promise<TraktCastEntry[]> {
+    const itemId = this.getItemPath(ids);
+    if (!itemId) {
+      return [];
+    }
+
+    const response = await this.request<TraktPeopleResponse>(`/${type}s/${itemId}/people?extended=full`);
+    return response.cast ?? [];
+  }
+
+  async getCastForItem(item: TraktSearchItem): Promise<TraktCastEntry[]> {
+    if (item.type === 'movie' && item.movie) {
+      return await this.getPeople('movie', item.movie.ids);
+    }
+    if (item.type === 'show' && item.show) {
+      return await this.getPeople('show', item.show.ids);
+    }
+    return [];
   }
 
   private async searchEndpoint(type: 'movie' | 'show', query: string, limit: number): Promise<TraktSearchItem[]> {

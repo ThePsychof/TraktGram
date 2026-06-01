@@ -8,6 +8,18 @@ export interface TraktIds {
   tvdb?: number;
 }
 
+export interface TraktImageSize {
+  full?: string;
+  thumb?: string;
+  medium?: string;
+}
+
+export interface TraktImages {
+  poster?: TraktImageSize;
+  fanart?: TraktImageSize;
+  banner?: TraktImageSize;
+}
+
 export interface TraktMovieBase {
   title: string;
   name?: string;
@@ -19,6 +31,7 @@ export interface TraktMovieBase {
   votes?: number;
   genres?: string[];
   runtime?: number;
+  images?: TraktImages;
 }
 
 export interface TraktShowBase {
@@ -32,11 +45,26 @@ export interface TraktShowBase {
   rating?: number;
   votes?: number;
   genres?: string[];
+  images?: TraktImages;
 }
 
 export interface TraktTrendingItem {
   watchers: number;
   movie: TraktMovieBase;
+}
+
+export interface TraktPerson {
+  name: string;
+  ids?: TraktIds;
+}
+
+export interface TraktCastEntry {
+  character?: string;
+  person?: TraktPerson;
+}
+
+export interface TraktPeopleResponse {
+  cast?: TraktCastEntry[];
 }
 
 export interface TraktSearchItem {

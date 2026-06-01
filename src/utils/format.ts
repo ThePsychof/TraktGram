@@ -1,5 +1,10 @@
-import type { TmdbDetails } from '../types/tmdb';
-import type { TraktIds, TraktMovieBase, TraktSearchItem, TraktShowBase } from '../types/trakt';
+import type {
+  TraktCastEntry,
+  TraktIds,
+  TraktMovieBase,
+  TraktSearchItem,
+  TraktShowBase,
+} from '../types/trakt';
 
 export function escapeHtml(text: string): string {
   return text
@@ -22,15 +27,14 @@ export function formatRating(value?: number): string {
   if (typeof value !== 'number' || Number.isNaN(value)) {
     return 'N/A';
   }
-  return `${value.toFixed(1)}/10`;
+  return value.toFixed(1);
 }
 
-export function formatGenres(genres?: string[] | { name?: string }[]): string {
+export function formatGenres(genres?: string[]): string {
   if (!genres || genres.length === 0) {
     return 'N/A';
   }
-  const genreNames = genres.map((genre) => (typeof genre === 'string' ? genre : genre.name)).filter(Boolean);
-  return genreNames.slice(0, 5).join(', ') || 'N/A';
+  return genres.filter(Boolean).slice(0, 6).join(' • ') || 'N/A';
 }
 
 export function formatYear(year?: number | string): string {
@@ -38,24 +42,6 @@ export function formatYear(year?: number | string): string {
     return 'TBD';
   }
   return String(year);
-}
-
-export function formatCast(credits?: TmdbDetails['credits']): string {
-  if (!credits?.cast || credits.cast.length === 0) {
-    return 'N/A';
-  }
-  return credits.cast
-    .slice(0, 5)
-    .map((member) => member.name)
-    .join(', ');
-}
-
-export function formatDirector(credits?: TmdbDetails['credits']): string | undefined {
-  if (!credits?.crew || credits.crew.length === 0) {
-    return undefined;
-  }
-  const director = credits.crew.find((member) => member.job === 'Director');
-  return director?.name;
 }
 
 export function formatTraktUrl(type: 'movie' | 'show', ids: Record<string, unknown> | TraktIds): string {
@@ -69,68 +55,87 @@ export function formatTraktUrl(type: 'movie' | 'show', ids: Record<string, unkno
   return 'https://trakt.tv';
 }
 
-function getItemYear(meta: TraktMovieBase | TraktShowBase | undefined) {
+export function getPosterUrlFromItem(item: TraktSearchItem): string | undefined {
+  const meta = item.movie ?? item.show;
+  return (
+    meta?.images?.poster?.full ||
+    meta?.images?.poster?.thumb ||
+    meta?.images?.fanart?.full ||
+    meta?.images?.fanart?.thumb ||
+    undefined
+  );
+}
+
+export function getItemYear(
+  meta: TraktSearchItem | TraktMovieBase | TraktShowBase | undefined
+) {
   if (!meta) {
     return undefined;
   }
 
-  if ('first_aired' in meta && meta.first_aired) {
-    return meta.first_aired.slice(0, 4);
+  let source: TraktMovieBase | TraktShowBase | undefined;
+  if ('movie' in meta || 'show' in meta) {
+    source = meta.movie ?? meta.show;
+  } else {
+    source = meta as TraktMovieBase | TraktShowBase;
   }
-  if (meta.release_date) {
-    return meta.release_date.slice(0, 4);
+
+  if (!source) {
+    return undefined;
   }
-  return meta.year ?? undefined;
+
+  if ('first_aired' in source && source.first_aired) {
+    return source.first_aired.slice(0, 4);
+  }
+  if ('release_date' in source && source.release_date) {
+    return source.release_date.slice(0, 4);
+  }
+  return source.year ?? undefined;
 }
 
-export function buildSummaryText(item: TraktSearchItem, tmdb?: TmdbDetails) {
+function buildCastHtml(cast: TraktCastEntry[]): string {
+  const members = cast
+    .filter((entry) => Boolean(entry.person?.name))
+    .slice(0, 6)
+    .map((entry) => {
+      const name = escapeHtml(entry.person?.name ?? 'Unknown');
+      const slug = entry.person?.ids?.slug;
+      if (slug) {
+        return `<a href="https://trakt.tv/people/${encodeURIComponent(slug)}">${name}</a>`;
+      }
+      return name;
+    });
+
+  return members.length > 0 ? members.join(' ') : 'No cast available';
+}
+
+function buildTraktLine(type: 'movie' | 'show', ids?: TraktIds): string {
+  const url = formatTraktUrl(type, ids ?? {});
+  return `<a href="${escapeHtml(url)}">🎬 Trakt</a>`;
+}
+
+export function buildMessageCaption(item: TraktSearchItem, cast: TraktCastEntry[]): string {
   const meta = item.movie ?? item.show;
   const title = escapeHtml(meta?.title ?? meta?.name ?? 'Unknown title');
   const year = formatYear(getItemYear(meta));
-  const itemType = item.type === 'movie' ? 'Movie' : 'Show';
   const rating = formatRating(meta?.rating as number | undefined);
-  const overview = escapeHtml(truncate(meta?.overview ?? 'No description available.', 120));
-  return `${title} · ${year} · ${itemType} · ⭐ ${rating}
-${overview}`;
-}
-
-export function buildMessageCaption(
-  item: TraktSearchItem,
-  tmdb?: TmdbDetails
-): string {
-  const meta = item.movie ?? item.show;
-  const title = escapeHtml(meta?.title ?? meta?.name ?? 'Unknown title');
-  const year = formatYear(getItemYear(meta));
-  const itemType = item.type === 'movie' ? 'Movie' : 'Show';
-  const rating = formatRating(meta?.rating as number | undefined);
-  const genres = formatGenres(meta?.genres ?? tmdb?.genres ?? []);
-  const overview = escapeHtml(truncate(meta?.overview ?? 'No summary available.', 360));
-  const director = formatDirector(tmdb?.credits);
-  const cast = formatCast(tmdb?.credits);
+  const genres = formatGenres(meta?.genres ?? []);
+  const overview = escapeHtml(meta?.overview ?? 'No overview available.');
+  const castHtml = buildCastHtml(cast);
   const resultType = item.type === 'movie' || item.type === 'show' ? item.type : 'movie';
-  const traktUrl = formatTraktUrl(resultType, meta?.ids ?? {});
-  const votes = typeof meta?.votes === 'number' ? ` (${meta.votes.toLocaleString()} votes)` : '';
+  const traktLine = buildTraktLine(resultType, meta?.ids);
 
-  const lines = [
-    `<b>🎬 ${title}</b> <i>(${year})</i>`,
-    `<b>Type:</b> ${itemType}`,
-    `<b>Rating:</b> ${rating}${votes}`,
-    `<b>Genres:</b> ${escapeHtml(genres)}`,
-  ];
-
-  if (director) {
-    lines.push(`<b>Director:</b> ${escapeHtml(director)}`);
-  }
-
-  if (cast !== 'N/A') {
-    lines.push(`<b>Cast:</b> ${escapeHtml(cast)}`);
-  }
-
-  lines.push(`<b>Overview:</b> ${overview}`);
-  lines.push(`<b>Trakt:</b> <a href="${escapeHtml(traktUrl)}">Open on Trakt</a>`);
-  lines.push(`<i>Powered by TraktGram</i>`);
-
-  return lines.join('\n');
+  return [
+    `<b>${title}</b> <i>(${year})</i>`,
+    `⭐ IMDb ${rating}`,
+    `🎭 Genres`,
+    `\n> ${escapeHtml(genres)}`,
+    `🎬 Cast`,
+    `\n> ${castHtml}`,
+    `📝 Overview`,
+    `\n> <tg-spoiler>${overview}</tg-spoiler>`,
+    traktLine,
+  ].join('\n');
 }
 
 export function buildResultDescription(item: TraktSearchItem): string {
@@ -138,8 +143,7 @@ export function buildResultDescription(item: TraktSearchItem): string {
   const title = escapeHtml(meta?.title ?? meta?.name ?? 'Unknown');
   const year = formatYear(getItemYear(meta));
   const rating = formatRating(meta?.rating as number | undefined);
-  const typeLabel = item.type === 'movie' ? 'Movie' : 'Show';
-  return `${title} · ${year} · ${typeLabel} · ⭐ ${rating}`;
+  return `${title} · ${year} · ⭐ IMDb ${rating}`;
 }
 
 export function buildEmptyInlineResponse(query: string) {

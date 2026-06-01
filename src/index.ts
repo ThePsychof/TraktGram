@@ -1,7 +1,6 @@
 import { createBot } from './bot';
 import type { Update } from '@grammyjs/types';
 import { TraktService } from './services/trakt';
-import { TmdbService } from './services/tmdb';
 import logger from './utils/logger';
 
 interface Env {
@@ -9,7 +8,6 @@ interface Env {
   TRAKT_CLIENT_ID: string;
   TRAKT_CLIENT_SECRET: string;
   TRAKT_API_KEY?: string; // fallback for legacy deployments
-  TMDB_API_KEY?: string;
   WEBHOOK_SECRET?: string;
 }
 
@@ -55,8 +53,7 @@ export default {
       }
 
       const traktService = new TraktService(traktApiKey);
-      const tmdbService = new TmdbService(env.TMDB_API_KEY);
-      bot = createBot(env.BOT_TOKEN, traktService, tmdbService);
+      bot = createBot(env.BOT_TOKEN, traktService);
       botToken = env.BOT_TOKEN;
       await bot.init();
     }

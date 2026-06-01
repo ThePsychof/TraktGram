@@ -4,9 +4,8 @@ import type {
   InlineQueryResultArticle,
   InlineQueryResultPhoto,
 } from '@grammyjs/types';
-import type { TraktSearchItem } from '../types/trakt';
+import type { TraktCastEntry, TraktSearchItem } from '../types/trakt';
 import type { TraktService } from '../services/trakt';
-import type { TmdbService } from '../services/tmdb';
 import logger from '../utils/logger';
 import {
   buildEmptyInlineResponse,
@@ -14,24 +13,14 @@ import {
   buildResultDescription,
   escapeHtml,
   formatYear,
+  getItemYear,
+  getPosterUrlFromItem,
 } from '../utils/format';
 
 function getResultId(item: TraktSearchItem, index: number): string {
   const ids = item.movie?.ids ?? item.show?.ids ?? {};
   const uniqueId = ids.trakt ?? ids.tmdb ?? ids.imdb ?? item.movie?.title ?? item.show?.title ?? index;
   return `${item.type}-${uniqueId}`;
-}
-
-function getItemYear(item: TraktSearchItem): string | number | undefined {
-  const meta = item.movie ?? item.show;
-  if (!meta) return undefined;
-  if ('first_aired' in meta && meta.first_aired) {
-    return meta.first_aired.slice(0, 4);
-  }
-  if (meta.release_date) {
-    return meta.release_date.slice(0, 4);
-  }
-  return meta.year;
 }
 
 function buildPhotoResult(
@@ -77,16 +66,16 @@ function buildArticleResult(
 async function resolveInlineResult(
   item: TraktSearchItem,
   index: number,
-  tmdb: TmdbService
+  traktService: TraktService
 ) {
   const id = getResultId(item, index);
   const meta = item.movie ?? item.show;
   const title = meta?.title ?? meta?.name ?? 'Untitled';
   const year = formatYear(getItemYear(item));
   const description = buildResultDescription(item);
-  const details = await tmdb.findDetailsByTraktIds(meta?.ids, item.type as 'movie' | 'show');
-  const caption = buildMessageCaption(item, details ?? undefined);
-  const posterUrl = await tmdb.getPosterUrlForTraktItem(meta?.ids, item.type as 'movie' | 'show');
+  const cast = await traktService.getCastForItem(item);
+  const caption = buildMessageCaption(item, cast);
+  const posterUrl = getPosterUrlFromItem(item);
 
   if (posterUrl) {
     return buildPhotoResult(id, title, description, posterUrl, caption);
@@ -97,8 +86,7 @@ async function resolveInlineResult(
 
 export function registerInlineQuery(
   bot: Bot,
-  traktService: TraktService,
-  tmdbService: TmdbService
+  traktService: TraktService
 ) {
   bot.on('inline_query', async (ctx) => {
     const query = ctx.inlineQuery.query?.trim() ?? '';
@@ -108,37 +96,9 @@ export function registerInlineQuery(
       try {
         const trending = await traktService.getTrendingMovies(8);
         for (const [index, item] of trending.entries()) {
-          const title = item.movie?.title ?? 'Untitled';
-          const year = formatYear(item.movie?.year);
-          const description = `${title} · ${year} · ${item.watchers?.toLocaleString() ?? 'N/A'} watchers`;
-          const caption = `<b>🎬 ${escapeHtml(title)}</b> <i>(${year})</i>\n<b>Watchers:</b> ${item.watchers?.toLocaleString() ?? 'N/A'}\n<b>Powered by TraktGram</b>`;
-          const photoUrl = await tmdbService.getPosterUrlForTraktItem(item.movie?.ids, 'movie');
-          const resultId = `trending-${item.movie?.ids?.trakt ?? index}`;
-
-          if (photoUrl) {
-            results.push({
-              type: 'photo',
-              id: resultId,
-              photo_url: photoUrl,
-              thumbnail_url: photoUrl,
-              title,
-              description,
-              caption,
-              parse_mode: 'HTML',
-              show_caption_above_media: true,
-            });
-          } else {
-            results.push({
-              type: 'article',
-              id: resultId,
-              title,
-              description,
-              input_message_content: {
-                message_text: caption,
-                parse_mode: 'HTML',
-              },
-            });
-          }
+          const searchItem: TraktSearchItem = { type: 'movie', movie: item.movie };
+          const result = await resolveInlineResult(searchItem, index, traktService);
+          results.push(result);
         }
       } catch (error) {
         logger.error('Inline trending fallback failed', error);
@@ -163,7 +123,7 @@ export function registerInlineQuery(
       }
 
       for (const [index, item] of filtered.entries()) {
-        const result = await resolveInlineResult(item, index, tmdbService);
+        const result = await resolveInlineResult(item, index, traktService);
         results.push(result);
       }
 
