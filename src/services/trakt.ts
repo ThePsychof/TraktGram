@@ -9,20 +9,20 @@ import type { TraktTrendingItem } from '../types/trakt';
 export class TraktService {
   private base = 'https://api.trakt.tv';
 
-  constructor(private clientId: string) {
-    if (!this.clientId) {
-      logger.error('TRAKT_CLIENT_ID is not set in environment');
+  constructor(private apiKey: string) {
+    if (!this.apiKey) {
+      logger.error('TRAKT_API_KEY is not set in environment');
     }
   }
 
   private getHeaders() {
-    if (!this.clientId) {
+    if (!this.apiKey) {
       throw new Error('Trakt API key not configured');
     }
     return {
       'Content-Type': 'application/json',
       'trakt-api-version': '2',
-      'trakt-api-key': this.clientId,
+      'trakt-api-key': this.apiKey,
     } as Record<string, string>;
   }
 
