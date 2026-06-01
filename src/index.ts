@@ -3,10 +3,11 @@ import type { Update } from '@grammyjs/types';
 import { TraktService } from './services/trakt';
 import logger from './utils/logger';
 
-interface CloudflareEnv {
+interface Env {
   BOT_TOKEN: string;
-  TRAKT_API_KEY: string;
-  TRAKT_CLIENT_SECRET?: string;
+  TRAKT_CLIENT_ID: string;
+  TRAKT_CLIENT_SECRET: string;
+  TRAKT_API_KEY?: string; // fallback for legacy deployments
   WEBHOOK_SECRET?: string;
 }
 
@@ -14,7 +15,7 @@ let bot = null as ReturnType<typeof createBot> | null;
 let botToken: string | undefined;
 
 export default {
-  async fetch(request: Request, env: CloudflareEnv, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method !== 'POST') {
       return new Response('Method Not Allowed', { status: 405 });
     }
@@ -33,7 +34,25 @@ export default {
     }
 
     if (!bot || botToken !== env.BOT_TOKEN) {
-      const traktService = new TraktService(env.TRAKT_API_KEY);
+      const hasClientId = Boolean(env.TRAKT_CLIENT_ID);
+      const hasClientSecret = Boolean(env.TRAKT_CLIENT_SECRET);
+      const hasLegacyKey = Boolean(env.TRAKT_API_KEY);
+      const usedKeyName = hasClientId ? 'TRAKT_CLIENT_ID' : hasLegacyKey ? 'TRAKT_API_KEY' : 'none';
+
+      logger.info('Trakt env variables:', {
+        TRAKT_CLIENT_ID: hasClientId,
+        TRAKT_CLIENT_SECRET: hasClientSecret,
+        TRAKT_API_KEY: hasLegacyKey,
+        using: usedKeyName,
+      });
+
+      const traktApiKey = env.TRAKT_CLIENT_ID ?? env.TRAKT_API_KEY;
+      if (!traktApiKey) {
+        logger.error('Trakt API key not configured. Set TRAKT_CLIENT_ID in Cloudflare secrets.');
+        return new Response('Internal Server Error', { status: 500 });
+      }
+
+      const traktService = new TraktService(traktApiKey);
       bot = createBot(env.BOT_TOKEN, traktService);
       botToken = env.BOT_TOKEN;
       await bot.init();
@@ -46,4 +65,4 @@ export default {
 
     return new Response('OK', { status: 200 });
   }
-} as ExportedHandler<CloudflareEnv>;
+} as ExportedHandler<Env>;

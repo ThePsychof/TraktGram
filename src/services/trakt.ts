@@ -11,7 +11,7 @@ export class TraktService {
 
   constructor(private apiKey: string) {
     if (!this.apiKey) {
-      logger.error('TRAKT_API_KEY is not set in environment');
+      logger.error('Trakt API key not set in TraktService constructor');
     }
   }
 
