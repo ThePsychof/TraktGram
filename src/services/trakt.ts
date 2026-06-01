@@ -6,20 +6,18 @@ import type { TraktTrendingItem } from '../types/trakt';
   - Uses `fetch` and required headers for Trakt API v2.
   - Exposes `getTrendingMovies(limit)` which returns typed items.
 */
-class TraktService {
+export class TraktService {
   private base = 'https://api.trakt.tv';
-  private clientId: string;
 
-  constructor() {
-    this.clientId = process.env.TRAKT_CLIENT_ID || '';
+  constructor(private clientId: string) {
     if (!this.clientId) {
-      logger.error('TRAKT_CLIENT_ID is not set in environment');
+      logger.error('TRAKT_API_KEY is not set in environment');
     }
   }
 
   private getHeaders() {
     if (!this.clientId) {
-      throw new Error('Trakt client id not configured');
+      throw new Error('Trakt API key not configured');
     }
     return {
       'Content-Type': 'application/json',
@@ -28,7 +26,6 @@ class TraktService {
     } as Record<string, string>;
   }
 
-  // Fetch trending movies from Trakt API. Returns an array of TraktTrendingItem.
   async getTrendingMovies(limit = 5): Promise<TraktTrendingItem[]> {
     const url = `${this.base}/movies/trending?limit=${limit}`;
     try {
@@ -43,13 +40,10 @@ class TraktService {
         throw new Error('Trakt API returned an error');
       }
 
-      const data = (await res.json()) as TraktTrendingItem[];
-      return data;
+      return (await res.json()) as TraktTrendingItem[];
     } catch (err) {
       logger.error('Failed to fetch trending movies from Trakt', err);
       throw new Error('Unable to fetch trending movies right now. Try again later.');
     }
   }
 }
-
-export default new TraktService();

@@ -1,0 +1,20 @@
+name = "traktgram"
+main = "src/index.ts"
+compatibility_date = "2024-12-16"
+compatibility_flags = ["nodejs_compat"]
+
+# Environment configuration
+[env.production]
+name = "traktgram-prod"
+
+[env.staging]
+name = "traktgram-staging"
+
+# KV namespace binding (optional, for future features like user sessions)
+# [[kv_namespaces]]
+# binding = "STORE"
+# id = "your-kv-namespace-id"
+# preview_id = "your-preview-id"
+
+# Environment variables are set via wrangler secret set command
+# These include: BOT_TOKEN, TRAKT_API_KEY, TRAKT_API_SECRET, WEBHOOK_SECRET

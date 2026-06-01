@@ -1,9 +1,9 @@
 import type { Bot } from 'grammy';
-import traktService from '../services/trakt';
+import type { TraktService } from '../services/trakt';
 import logger from '../utils/logger';
 
 // Register `/trending` command — fetches top trending movies via Trakt service.
-export function registerTrending(bot: Bot) {
+export function registerTrending(bot: Bot, traktService: TraktService) {
   bot.command('trending', async (ctx) => {
     await ctx.reply('Fetching trending movies...');
 
