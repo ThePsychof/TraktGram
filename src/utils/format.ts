@@ -124,8 +124,8 @@ export function getItemYear(
   return source.year ?? undefined;
 }
 
-function buildCastHtml(cast: TraktCastEntry[]): string {
-  const members = cast
+function buildCastHtml(cast: TraktCastEntry[]): string[] {
+  return cast
     .filter((entry) => Boolean(entry.person?.name))
     .slice(0, 6)
     .map((entry) => {
@@ -136,8 +136,6 @@ function buildCastHtml(cast: TraktCastEntry[]): string {
       }
       return name;
     });
-
-  return members.length > 0 ? members.join(' ') : 'No cast available';
 }
 
 export function buildTraktReplyMarkup(
@@ -157,14 +155,23 @@ export function buildMessageCaption(item: TraktSearchItem, cast: TraktCastEntry[
   const genres = formatGenres(meta?.genres ?? []);
   const overview = escapeHtml(meta?.overview ?? 'No overview available.');
   const castHtml = buildCastHtml(cast);
+  const castLines =
+    castHtml.length > 0
+      ? castHtml.map((actor) => `• ${actor}`)
+      : ['• No cast available'];
 
   return [
-    `<b>${title}</b> <i>(${year})</i>`,
+    `<b>${title} (${year})</b>`,
+    ``,
     `⭐ IMDb ${rating}`,
+    ``,
     `🎭 ${genres}`,
+    ``,
     `🎬 Cast`,
-    `${castHtml}`,
-    `📝 <tg-spoiler>${overview}</tg-spoiler>`,
+    ...castLines,
+    ``,
+    `📝 Overview`,
+    `<tg-spoiler>${overview}</tg-spoiler>`,
   ].join('\n');
 }
 
