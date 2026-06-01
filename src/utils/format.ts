@@ -161,12 +161,10 @@ export function buildMessageCaption(item: TraktSearchItem, cast: TraktCastEntry[
   return [
     `<b>${title}</b> <i>(${year})</i>`,
     `⭐ IMDb ${rating}`,
-    `🎭 Genres`,
-    `\n> ${escapeHtml(genres)}`,
+    `🎭 ${genres}`,
     `🎬 Cast`,
-    `\n> ${castHtml}`,
-    `📝 Overview`,
-    `\n> <tg-spoiler>${overview}</tg-spoiler>`,
+    `${castHtml}`,
+    `📝 <tg-spoiler>${overview}</tg-spoiler>`,
   ].join('\n');
 }
 
