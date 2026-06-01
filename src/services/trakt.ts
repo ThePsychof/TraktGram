@@ -20,6 +20,7 @@ export class TraktService {
       throw new Error('Trakt API key not configured');
     }
     return {
+      Accept: 'application/json',
       'Content-Type': 'application/json',
       'trakt-api-version': '2',
       'trakt-api-key': this.apiKey,
@@ -28,19 +29,55 @@ export class TraktService {
 
   async getTrendingMovies(limit = 5): Promise<TraktTrendingItem[]> {
     const url = `${this.base}/movies/trending?limit=${limit}`;
+    const headers = this.getHeaders();
+    logger.info('Sending request to Trakt', { url, headers });
+
     try {
       const res = await fetch(url, {
         method: 'GET',
-        headers: this.getHeaders(),
+        headers,
       });
 
+      const responseUrl = res.url;
+      const status = res.status;
+      const statusText = res.statusText;
+      const responseHeaders = Object.fromEntries(res.headers.entries());
+      const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
+      const body = await res.text();
+      const bodySample = body.slice(0, 1000);
+      const isHtml = contentType.includes('text/html') || contentType.includes('application/xhtml+xml') || body.trim().startsWith('<');
+
+      const responseInfo = {
+        url,
+        responseUrl,
+        status,
+        statusText,
+        headers: responseHeaders,
+        contentType,
+        bodySample,
+        isHtml,
+      };
+
       if (!res.ok) {
-        const body = await res.text();
-        logger.error('Trakt API error', res.status, body);
-        throw new Error('Trakt API returned an error');
+        logger.error('Trakt API returned non-ok response', responseInfo);
+        const htmlReason = isHtml ? 'HTML response detected instead of JSON.' : 'Non-JSON response detected.';
+        throw new Error(`Trakt API returned ${status} ${statusText}. ${htmlReason}`);
       }
 
-      return (await res.json()) as TraktTrendingItem[];
+      if (isHtml) {
+        logger.error('Trakt API returned HTML instead of JSON', responseInfo);
+        throw new Error('Trakt API returned HTML instead of JSON');
+      }
+
+      try {
+        return JSON.parse(body) as TraktTrendingItem[];
+      } catch (parseErr) {
+        logger.error('Trakt API returned invalid JSON', {
+          ...responseInfo,
+          parseError: parseErr,
+        });
+        throw new Error('Trakt API returned invalid JSON');
+      }
     } catch (err) {
       logger.error('Failed to fetch trending movies from Trakt', err);
       throw new Error('Unable to fetch trending movies right now. Try again later.');
