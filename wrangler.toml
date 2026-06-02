@@ -6,8 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 # KV namespace bindings for OAuth state and user session storage
 [[kv_namespaces]]
 binding = "STORE"
-id = "your-kv-namespace-id"
-preview_id = "your-preview-id"
+id = "9be5924a900a44aa9ad8e94fd8a5d0b5"
+preview_id = "9be5924a900a44aa9ad8e94fd8a5d0b5"
 
 # Environment configuration
 [env.production]
@@ -15,14 +15,14 @@ name = "traktgram-prod"
 
 [[env.production.kv_namespaces]]
 binding = "STORE"
-id = "your-production-kv-namespace-id"
+id = "9be5924a900a44aa9ad8e94fd8a5d0b5"
 
 [env.staging]
 name = "traktgram-staging"
 
 [[env.staging.kv_namespaces]]
 binding = "STORE"
-id = "your-staging-kv-namespace-id"
+id = "9be5924a900a44aa9ad8e94fd8a5d0b5"
 
 # Environment variables are set via wrangler secret set command
 # These include:
