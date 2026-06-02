@@ -11,7 +11,7 @@ export function registerHelp(bot: Bot) {
       '/login - Connect your Trakt account',
       '/me - Show your Trakt account info',
       '/trending - Show top 5 trending movies from Trakt',
-      '\n*Inline mode:* Type `@TraktGramBot <movie or show>` anywhere to search Trakt instantly.',
+      '\n*Inline mode:* Type `@TraktGram_Bot <movie or show>` anywhere to search Trakt instantly.',
     ].join('\n');
 
     await ctx.reply(msg, { parse_mode: 'Markdown' });

@@ -249,7 +249,7 @@ export const getSuccessPageHTML = (username: string): string => {
     </div>
 
     <div class="button-group">
-      <a href="https://t.me/TraktGramBot" class="button button-primary">Back to Telegram</a>
+      <a href="https://t.me/TraktGram_Bot" class="button button-primary">Back to Telegram</a>
       <a href="https://trakt.tv" class="button button-secondary">Visit Trakt.tv</a>
     </div>
 
@@ -398,7 +398,7 @@ export const getErrorPageHTML = (errorMessage: string): string => {
       <p>Please try again or contact support if the problem persists.</p>
     </div>
 
-    <a href="https://t.me/TraktGramBot?start=login" class="button">Try Again</a>
+    <a href="https://t.me/TraktGram_Bot?start=login" class="button">Try Again</a>
 
     <div class="footer">
       <p>TraktGram • Telegram Bot for Trakt.tv</p>
