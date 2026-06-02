@@ -8,6 +8,8 @@ export function registerHelp(bot: Bot) {
       '/start - Welcome message',
       '/ping - Respond with pong',
       '/help - Show this help',
+      '/login - Connect your Trakt account',
+      '/me - Show your Trakt account info',
       '/trending - Show top 5 trending movies from Trakt',
       '\n*Inline mode:* Type `@TraktGramBot <movie or show>` anywhere to search Trakt instantly.',
     ].join('\n');

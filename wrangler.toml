@@ -3,18 +3,31 @@ main = "src/index.ts"
 compatibility_date = "2024-12-16"
 compatibility_flags = ["nodejs_compat"]
 
+# KV namespace bindings for OAuth state and user session storage
+[[kv_namespaces]]
+binding = "STORE"
+id = "your-kv-namespace-id"
+preview_id = "your-preview-id"
+
 # Environment configuration
 [env.production]
 name = "traktgram-prod"
 
+[[env.production.kv_namespaces]]
+binding = "STORE"
+id = "your-production-kv-namespace-id"
+
 [env.staging]
 name = "traktgram-staging"
 
-# KV namespace binding (optional, for future features like user sessions)
-# [[kv_namespaces]]
-# binding = "STORE"
-# id = "your-kv-namespace-id"
-# preview_id = "your-preview-id"
+[[env.staging.kv_namespaces]]
+binding = "STORE"
+id = "your-staging-kv-namespace-id"
 
 # Environment variables are set via wrangler secret set command
-# These include: BOT_TOKEN, TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET, WEBHOOK_SECRET
+# These include:
+#   BOT_TOKEN - Telegram bot token
+#   TRAKT_CLIENT_ID - Trakt OAuth client ID
+#   TRAKT_CLIENT_SECRET - Trakt OAuth client secret
+#   WEBHOOK_SECRET - Optional: Telegram webhook secret token
+#   OAUTH_REDIRECT_URI - Optional: OAuth redirect URI (defaults to https://<worker-domain>/auth/callback)
