@@ -36,6 +36,14 @@ export class TraktService {
     } as Record<string, string>;
   }
 
+  private getAuthHeaders(accessToken?: string) {
+    const headers = this.getHeaders();
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    return headers;
+  }
+
   private async request<T>(path: string): Promise<T> {
     const cacheKey = `trakt:${path}`;
     const cached = this.cache.get<T>(cacheKey);
@@ -78,6 +86,154 @@ export class TraktService {
 
   async getTrendingMovies(limit = 5): Promise<TraktTrendingItem[]> {
     return await this.request<TraktTrendingItem[]>(`/movies/trending?limit=${limit}&extended=full,images`);
+  }
+
+  /*
+    User-scoped endpoints (require OAuth access token)
+  */
+
+  async getWatchlist(accessToken: string, type = 'all', page = 1, limit = 10): Promise<any[]> {
+    const qType = type === 'all' ? '' : `/${encodeURIComponent(type)}`;
+    const path = `/sync/watchlist${qType}?page=${page}&limit=${limit}&extended=full,images`;
+    const url = `${this.base}${path}`;
+    const cacheKey = `trakt:watchlist:${type}:${page}:${limit}`;
+    const cached = this.cache.get<any[]>(cacheKey);
+    if (cached) return cached;
+
+    const res = await fetch(url, { method: 'GET', headers: this.getAuthHeaders(accessToken) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed fetching watchlist', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt watchlist returned ${res.status}`);
+    }
+    const json = await res.json();
+    this.cache.set(cacheKey, json, 60 * 2);
+    return json;
+  }
+
+  async getHistory(accessToken: string, type = '', page = 1, limit = 20): Promise<any[]> {
+    const qType = type ? `/${encodeURIComponent(type)}` : '';
+    const path = `/sync/history${qType}?page=${page}&limit=${limit}&extended=full,images`;
+    const url = `${this.base}${path}`;
+    const res = await fetch(url, { method: 'GET', headers: this.getAuthHeaders(accessToken) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed fetching history', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt history returned ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async getPlaybackEpisodes(accessToken: string): Promise<any[]> {
+    const path = `/sync/playback/episodes`;
+    const url = `${this.base}${path}?extended=full,images`;
+    const res = await fetch(url, { method: 'GET', headers: this.getAuthHeaders(accessToken) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed fetching playback episodes', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt playback episodes returned ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async getPlaybackMovies(accessToken: string): Promise<any[]> {
+    const path = `/sync/playback/movies`;
+    const url = `${this.base}${path}?extended=full,images`;
+    const res = await fetch(url, { method: 'GET', headers: this.getAuthHeaders(accessToken) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed fetching playback movies', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt playback movies returned ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async getContinueWatching(accessToken: string, limit = 20): Promise<any[]> {
+    const [episodes, movies] = await Promise.all([
+      this.getPlaybackEpisodes(accessToken),
+      this.getPlaybackMovies(accessToken),
+    ]);
+    const combined = [...(episodes || []), ...(movies || [])];
+    return combined.slice(0, limit);
+  }
+
+  async addHistoryEntry(accessToken: string, payload: any): Promise<any> {
+    const path = `/sync/history`;
+    const url = `${this.base}${path}`;
+    const res = await fetch(url, { method: 'POST', headers: this.getAuthHeaders(accessToken), body: JSON.stringify(payload) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed adding history', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt history add returned ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async createCheckin(accessToken: string, payload: any): Promise<any> {
+    const url = `${this.base}/checkin`;
+    const res = await fetch(url, { method: 'POST', headers: this.getAuthHeaders(accessToken), body: JSON.stringify(payload) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed creating checkin', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt checkin returned ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async rateItem(accessToken: string, payload: any): Promise<any> {
+    const url = `${this.base}/sync/ratings`;
+    const res = await fetch(url, { method: 'POST', headers: this.getAuthHeaders(accessToken), body: JSON.stringify(payload) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed saving rating', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt ratings returned ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async addToWatchlist(accessToken: string, payload: any): Promise<any> {
+    const url = `${this.base}/sync/watchlist`;
+    const res = await fetch(url, { method: 'POST', headers: this.getAuthHeaders(accessToken), body: JSON.stringify(payload) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed adding to watchlist', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt watchlist add returned ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async removeFromWatchlist(accessToken: string, payload: any): Promise<any> {
+    const url = `${this.base}/sync/watchlist/remove`;
+    const res = await fetch(url, { method: 'POST', headers: this.getAuthHeaders(accessToken), body: JSON.stringify(payload) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed removing from watchlist', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt watchlist remove returned ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async getRecommendations(accessToken: string, type = 'movies', page = 1, limit = 10): Promise<any[]> {
+    const path = `/recommendations/${encodeURIComponent(type)}?page=${page}&limit=${limit}&extended=full,images`;
+    const url = `${this.base}${path}`;
+    const res = await fetch(url, { method: 'GET', headers: this.getAuthHeaders(accessToken) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed fetching recommendations', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt recommendations returned ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async getUserStats(accessToken: string): Promise<any> {
+    const url = `${this.base}/users/me/stats`;
+    const res = await fetch(url, { method: 'GET', headers: this.getAuthHeaders(accessToken) });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error('Failed fetching user stats', { status: res.status, body: body.slice(0, 1000) });
+      throw new Error(`Trakt user stats returned ${res.status}`);
+    }
+    return await res.json();
   }
 
   private getItemPath(ids: TraktIds | undefined): string | null {
