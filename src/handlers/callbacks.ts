@@ -70,6 +70,43 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
         return;
       }
 
+      if (action === 'home') {
+          await renderHome(ctx, oauthService as any);
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
+      if (action === 'trending') {
+        try {
+          const items = await traktService.getTrendingMovies(5);
+          if (!items || items.length === 0) { await ctx.answerCallbackQuery({ text: 'No trending items', show_alert: false }); return; }
+          const lines = items.map((it:any,i:number) => `${i+1}. ${it.movie?.title ?? 'Unknown'} (${it.movie?.year ?? 'N/A'})`);
+          await ctx.reply(`Top trending:\n\n${lines.join('\n')}`);
+          await ctx.answerCallbackQuery();
+        } catch (err) { logger.error('trending error', err); await ctx.answerCallbackQuery({ text: 'Failed to fetch trending', show_alert: true }); }
+        return;
+      }
+
+      if (action === 'connect') {
+          if (!oauthService) { await ctx.answerCallbackQuery({ text: 'OAuth not configured', show_alert: true }); return; }
+        if (!ctx.from) { await ctx.answerCallbackQuery({ text: 'Unable to determine user', show_alert: true }); return; }
+        try {
+            const url = await oauthService.generateAuthorizationUrl(ctx.from.id);
+          await ctx.reply(`Connect your Trakt account: ${url}`);
+          await ctx.answerCallbackQuery();
+        } catch (err) {
+          logger.error('connect url error', err);
+          await ctx.answerCallbackQuery({ text: 'Failed to start OAuth', show_alert: true });
+        }
+        return;
+      }
+
+      if (action === 'search') {
+        await ctx.reply('Type a search query to use inline search or use the bot inline in any chat.');
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
       if (action === 'details') {
         const t = params.t;
         const id = Number(params.id);
