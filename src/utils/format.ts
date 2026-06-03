@@ -52,15 +52,18 @@ export function formatYear(year?: number | string): string {
   return String(year);
 }
 
-export function formatTraktUrl(type: 'movie' | 'show', ids: Record<string, unknown> | TraktIds): string {
+export function formatTraktUrl(type: 'movie' | 'show' | 'episode', ids: Record<string, unknown> | TraktIds): string {
   const slug = ids?.slug;
   if (typeof slug === 'string' && slug.length > 0) {
+    if (type === 'episode') {
+      return `https://trakt.tv/episodes/${slug}`;
+    }
     return `https://trakt.tv/${type}s/${slug}`;
   }
-  if (typeof ids?.imdb === 'string') {
-    return `https://trakt.tv/search?query=${encodeURIComponent(ids.imdb)}`;
+  if (type === 'episode') {
+    return 'https://trakt.tv/episodes';
   }
-  return 'https://trakt.tv';
+  return `https://trakt.tv/${type}s`;
 }
 
 function normalizeTraktImageUrl(value?: TraktImageSize): string | undefined {
@@ -163,7 +166,7 @@ export function buildMessageCaption(item: TraktSearchItem, cast: TraktCastEntry[
   return [
     `<b>${title} (${year})</b>`,
     ``,
-    `⭐ IMDb ${rating}`,
+    `⭐ Rating ${rating}`,
     ``,
     `🎭 ${genres}`,
     ``,
@@ -185,7 +188,7 @@ export function buildInlineResultDescription(item: TraktSearchItem): string {
   const meta = item.movie ?? item.show;
   const rating = formatRating(meta?.rating as number | undefined);
   const genres = formatInlineGenres(meta?.genres);
-  return truncate(`⭐ IMDb ${rating} 🎭 ${genres}`, 255);
+  return truncate(`⭐ Rating ${rating} 🎭 ${genres}`, 255);
 }
 
 export function buildEmptyInlineResponse(query: string) {

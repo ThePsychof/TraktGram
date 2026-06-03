@@ -253,6 +253,45 @@ export class TraktService {
     return await res.json();
   }
 
+  async getCollection(accessToken: string, type = 'all', page = 1, limit = 10): Promise<any[]> {
+    const qType = type === 'all' ? '' : `/${encodeURIComponent(type)}`;
+    const path = `/sync/collection${qType}?page=${page}&limit=${limit}&extended=full,images`;
+    return await this.requestAuth<any[]>(path, accessToken);
+  }
+
+  async getCollectionStatus(accessToken: string, type: 'movie' | 'show', id: number): Promise<boolean> {
+    try {
+      await this.requestAuth<any>(`/sync/collection/${type}/${id}`, accessToken);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async getCalendarShows(accessToken: string, days = 7): Promise<any[]> {
+    return await this.requestAuth<any[]>(`/calendars/my/shows?days=${days}&extended=full,images`, accessToken);
+  }
+
+  async getCalendarMovies(accessToken: string, days = 7): Promise<any[]> {
+    return await this.requestAuth<any[]>(`/calendars/my/movies?days=${days}&extended=full,images`, accessToken);
+  }
+
+  async getShowProgress(accessToken: string, showId: number): Promise<any> {
+    return await this.requestAuth<any>(`/shows/${showId}/progress/watched?hidden_seasons=true`, accessToken);
+  }
+
+  async getEpisodeById(episodeId: number): Promise<any> {
+    return await this.request<any>(`/episodes/${episodeId}?extended=full,images`);
+  }
+
+  async getEpisodeCast(episodeId: number): Promise<any[]> {
+    const response = await this.request<any>(`/episodes/${episodeId}/people?extended=full`);
+    return response.cast ?? [];
+  }
+
   async getUserStats(accessToken: string): Promise<any> {
     const url = `${this.base}/users/me/stats`;
     const res = await fetch(url, { method: 'GET', headers: this.getAuthHeaders(accessToken) });

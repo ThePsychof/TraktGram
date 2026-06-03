@@ -6,8 +6,10 @@ import { renderContinueWatching } from '../ui/screens/continueWatching';
 import { renderWatchlist } from '../ui/screens/watchlist';
 import { renderDetails } from '../ui/screens/details';
 import { renderHistory } from '../ui/screens/history';
-import { renderAccount } from '../ui/screens/account';
+import { renderProfile } from '../ui/screens/account';
 import { renderRecommendations } from '../ui/screens/recommendations';
+import { renderCalendar } from '../ui/screens/calendar';
+import { renderCollection } from '../ui/screens/collection';
 import { buildManagementKeyboard, buildRatingKeyboard } from '../ui/menus';
 import logger from '../utils/logger';
 import { decodeCallback, encodeCallback } from '../utils/callbackData';
@@ -49,7 +51,32 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
     }
   });
 
-  // Generic decoded callback handler
+  bot.callbackQuery('a:calendar', async (ctx) => {
+    try {
+      if (!oauthService) {
+        await ctx.answerCallbackQuery({ text: 'OAuth not configured', show_alert: true });
+        return;
+      }
+      await renderCalendar(ctx, traktService, oauthService);
+      await ctx.answerCallbackQuery();
+    } catch (err) {
+      logger.error('calendar callback error', err);
+    }
+  });
+
+  bot.callbackQuery('a:account', async (ctx) => {
+    try {
+      if (!oauthService) {
+        await ctx.answerCallbackQuery({ text: 'OAuth not configured', show_alert: true });
+        return;
+      }
+      await renderProfile(ctx, oauthService, traktService);
+      await ctx.answerCallbackQuery();
+    } catch (err) {
+      logger.error('account callback error', err);
+    }
+  });
+
   bot.on('callback_query:data', async (ctx) => {
     try {
       const data = ctx.callbackQuery.data || '';
@@ -67,6 +94,19 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
       if (action === 'watchlist') {
         const page = Number(params.page || '1');
         await renderWatchlist(ctx, traktService, oauthService as any, page);
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
+      if (action === 'collection') {
+        const page = Number(params.page || '1');
+        await renderCollection(ctx, traktService, oauthService as any, page);
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
+      if (action === 'calendar') {
+        await renderCalendar(ctx, traktService, oauthService as any);
         await ctx.answerCallbackQuery();
         return;
       }
@@ -125,7 +165,7 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
 
       if (action === 'account') {
         if (!oauthService) { await ctx.answerCallbackQuery({ text: 'OAuth not configured', show_alert: true }); return; }
-        await renderAccount(ctx, oauthService as any, traktService);
+        await renderProfile(ctx, oauthService as any, traktService);
         await ctx.answerCallbackQuery();
         return;
       }

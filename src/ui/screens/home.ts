@@ -5,7 +5,7 @@ import type { OAuthService } from '../../services/oauth';
 
 export async function renderHome(ctx: Context, oauthService?: OAuthService) {
   const isAuthenticated = !!(ctx.from && oauthService && (await oauthService.getAuthenticatedUser(ctx.from.id)));
-  const text = '🎬 TraktGram\nChoose an action below.';
+  const text = '📺 TraktGram — your Trakt home inside Telegram.\n\nUse the buttons below to access Continue Watching, Watchlist, History, Recommendations, Profile, and Search.';
   const markup: InlineKeyboardMarkup = buildMainMenu(!!isAuthenticated);
   // Use editMessageText when possible, otherwise reply
   try {

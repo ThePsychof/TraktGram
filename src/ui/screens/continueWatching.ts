@@ -35,8 +35,9 @@ export async function renderContinueWatching(ctx: Context, traktService: TraktSe
     const idx = Math.max(0, Math.min(total - 1, page - 1));
     const item = items[idx];
 
-    const title = item.movie?.title ?? item.show?.title ?? item.title ?? 'Unknown';
-    const subtitle = item.episode ? `S${item.episode.season}E${item.episode.number}` : '';
+    const title = item.show?.title ?? item.movie?.title ?? item.title ?? 'Unknown';
+    const episode = item.episode;
+    const subtitle = episode ? `S${episode.season}E${episode.number}${episode.title ? ` - ${episode.title}` : ''}` : '';
 
     const poster = extractPoster(item) ?? undefined;
 

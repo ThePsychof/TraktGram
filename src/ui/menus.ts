@@ -3,23 +3,26 @@ import { encodeCallback } from '../utils/callbackData';
 
 export function buildMainMenu(isAuthenticated: boolean): InlineKeyboardMarkup {
   const authRow = isAuthenticated
-    ? [{ text: '👤 My Account', callback_data: 'a:account' }]
+    ? [{ text: '👤 Profile', callback_data: 'a:account' }]
     : [{ text: '🔐 Connect Trakt', callback_data: 'a:connect' }];
 
   return {
     inline_keyboard: [
       [
-        { text: '🔥 Trending', callback_data: 'a:trending' },
         { text: '📺 Continue Watching', callback_data: 'a:continue' },
+        { text: '📅 Calendar', callback_data: 'a:calendar' },
         { text: '🔍 Search', callback_data: 'a:search' },
       ],
       [
-        { text: '🎯 Recommendations', callback_data: 'a:recommendations' },
         { text: '📝 Watchlist', callback_data: 'a:watchlist' },
         { text: '📜 History', callback_data: 'a:history' },
+        { text: '🎯 Recommendations', callback_data: 'a:recommendations' },
       ],
-      authRow,
-      [{ text: '🏠 Home', callback_data: 'a:home' }],
+      [
+        authRow[0],
+        { text: '🔥 Trending', callback_data: 'a:trending' },
+        { text: '🏠 Home', callback_data: 'a:home' },
+      ],
     ],
   } as InlineKeyboardMarkup;
 }

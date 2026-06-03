@@ -20,7 +20,7 @@ import {
 
 function getResultId(item: TraktSearchItem, index: number): string {
   const ids = item.movie?.ids ?? item.show?.ids ?? {};
-  const uniqueId = ids.trakt ?? ids.tmdb ?? ids.imdb ?? item.movie?.title ?? item.show?.title ?? index;
+  const uniqueId = ids.trakt ?? ids.tmdb ?? item.movie?.title ?? item.show?.title ?? index;
   return `${item.type}-${uniqueId}`;
 }
 

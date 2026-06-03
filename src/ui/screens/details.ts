@@ -36,29 +36,37 @@ function buildStatusLine(options: { rating?: number | null; watchlist?: boolean 
 
 export async function renderDetails(ctx: Context, traktService: TraktService, oauthService: OAuthService | undefined, type: string, id: number) {
   try {
-    const item = await traktService.getItemById(type as 'movie' | 'show', id);
+    const isEpisode = type === 'episode';
+    const item = isEpisode
+      ? await traktService.getEpisodeById(id)
+      : await traktService.getItemById(type as 'movie' | 'show', id);
+
     const title = item.title ?? item.name ?? 'Unknown';
-    const year = item.year ?? item.first_aired?.slice(0, 4) ?? '';
+    const year = item.year ?? item.first_aired?.slice(0, 4) ?? item.show?.year ?? '';
     const metadataRating = item.rating ?? null;
-    const genres = formatGenres(item.genres ?? []);
+    const genres = formatGenres(item.genres ?? item.show?.genres ?? []);
     const overview = item.overview ?? 'No overview available.';
     const poster = extractPoster(item);
-    const traktUrl = formatTraktUrl(type as 'movie' | 'show', item.ids ?? {});
+    const traktUrl = isEpisode
+      ? `https://trakt.tv/${item.show?.ids?.slug ? `shows/${item.show.ids.slug}/seasons/${item.season}/episodes/${item.number}` : 'trakt'}`
+      : formatTraktUrl(type as 'movie' | 'show', item.ids ?? {});
 
     let watchlistStatus: boolean | null = null;
     let userRating: number | null = null;
     let lastWatched: string | null = null;
     let playCount: number | null = null;
     let authenticated = false;
+    let progressSummary: string | null = null;
 
     const accessToken = ctx.from && oauthService ? await oauthService.getValidAccessToken(ctx.from.id) : null;
     authenticated = Boolean(accessToken);
 
-    if (accessToken) {
-      const [ratingResult, listResult, summaryResult] = await Promise.allSettled([
+    if (accessToken && !isEpisode) {
+      const [ratingResult, listResult, summaryResult, progressResult] = await Promise.allSettled([
         traktService.getUserRating(accessToken, type as 'movie' | 'show', id),
         traktService.getWatchlistStatus(accessToken, type as 'movie' | 'show', id),
         traktService.getWatchedSummary(accessToken, type as 'movie' | 'show', id),
+        type === 'show' ? traktService.getShowProgress(accessToken, id) : Promise.resolve(null),
       ]);
 
       if (ratingResult.status === 'fulfilled') {
@@ -71,9 +79,35 @@ export async function renderDetails(ctx: Context, traktService: TraktService, oa
         lastWatched = summaryResult.value.last_watched_at ? new Date(summaryResult.value.last_watched_at).toISOString().slice(0, 10) : null;
         playCount = typeof summaryResult.value.play_count === 'number' ? summaryResult.value.play_count : null;
       }
+      if (progressResult.status === 'fulfilled' && progressResult.value) {
+        const progress = progressResult.value;
+        if (progress.completed_episodes != null && progress.aired_episodes != null) {
+          const percent = progress.aired_episodes > 0 ? Math.round((progress.completed_episodes / progress.aired_episodes) * 100) : 0;
+          const nextEpisode = progress.next_episode;
+          const nextText = nextEpisode ? `Next: S${nextEpisode.season}E${nextEpisode.number}` : 'No next episode available';
+          progressSummary = `Progress: ${percent}% • ${progress.completed_episodes}/${progress.aired_episodes} episodes watched • ${nextText}`;
+        }
+      }
     }
 
-    const castItems = await traktService.getItemCast(type as 'movie' | 'show', id);
+    if (accessToken && isEpisode) {
+      const [ratingResult, listResult, summaryResult] = await Promise.allSettled([
+        Promise.resolve(null),
+        Promise.resolve(null),
+        Promise.resolve(null),
+      ]);
+      if (listResult.status === 'fulfilled') {
+        watchlistStatus = false;
+      }
+      if (summaryResult.status === 'fulfilled' && summaryResult.value) {
+        lastWatched = null;
+        playCount = null;
+      }
+    }
+
+    const castItems = isEpisode
+      ? await traktService.getEpisodeCast(id)
+      : await traktService.getItemCast(type as 'movie' | 'show', id);
     const castList = castItems
       .filter((entry) => entry.person?.name)
       .slice(0, 6)
@@ -83,15 +117,21 @@ export async function renderDetails(ctx: Context, traktService: TraktService, oa
     const captionLines = [
       `<b>${escapeHtml(title)}${year ? ` (${escapeHtml(String(year))})` : ''}</b>`,
       '',
-      `⭐ IMDb ${formatRating(metadataRating)}`,
+      `⭐ Rating ${formatRating(metadataRating)}`,
       `🎭 ${escapeHtml(genres)}`,
-      '',
-      `🎬 Cast: ${castList}`,
-      '',
-      `📝 <tg-spoiler>${escapeHtml(overview)}</tg-spoiler>`,
-      '',
-      `👤 ${buildStatusLine({ rating: userRating, watchlist: watchlistStatus, lastWatched, playCount, authenticated })}`,
     ];
+
+    if (isEpisode) {
+      captionLines.push('', `📺 ${escapeHtml(item.show?.title ?? item.show?.name ?? 'Unknown show')}`);
+      captionLines.push(`🎞 Episode: S${item.season ?? '?'}E${item.number ?? '?'}`);
+    }
+
+    captionLines.push('', `🎬 Cast: ${castList}`);
+    captionLines.push('', `📝 <tg-spoiler>${escapeHtml(overview)}</tg-spoiler>`);
+    if (progressSummary) {
+      captionLines.push('', `📊 ${escapeHtml(progressSummary)}`);
+    }
+    captionLines.push('', `👤 ${buildStatusLine({ rating: userRating, watchlist: watchlistStatus, lastWatched, playCount, authenticated })}`);
 
     const keyboard = buildManagementKeyboard({
       type,

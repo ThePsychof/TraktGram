@@ -3,6 +3,14 @@ import type { TraktService } from '../../services/trakt';
 import type { OAuthService } from '../../services/oauth';
 import logger from '../../utils/logger';
 
+function getDateBucket(date: Date, today: Date): string {
+  const delta = Math.floor((today.setHours(0, 0, 0, 0) - date.setHours(0, 0, 0, 0)) / 86_400_000);
+  if (delta === 0) return 'Today';
+  if (delta === 1) return 'Yesterday';
+  if (delta <= 7) return 'Last Week';
+  return 'Older';
+}
+
 export async function renderHistory(ctx: Context, traktService: TraktService, oauthService: OAuthService, page = 1) {
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
@@ -19,23 +27,29 @@ export async function renderHistory(ctx: Context, traktService: TraktService, oa
       return;
     }
 
-    // Group by date
+    const today = new Date();
     const groups: Record<string, string[]> = {};
+
     for (const it of items) {
-      const when = it.watched_at ? new Date(it.watched_at).toISOString().slice(0,10) : 'Unknown';
+      const date = it.watched_at ? new Date(it.watched_at) : null;
+      const bucket = date ? getDateBucket(date, new Date()) : 'Unknown';
       const title = it.movie?.title ?? it.show?.title ?? it.title ?? 'Unknown';
-      groups[when] = groups[when] || [];
-      groups[when].push(`• ${title}`);
+      const time = date ? ` ${date.toISOString().slice(11, 16)}` : '';
+      groups[bucket] = groups[bucket] || [];
+      groups[bucket].push(`• ${title}${time}`);
     }
 
-    const lines: string[] = [];
-    for (const [date, entries] of Object.entries(groups)) {
-      lines.push(`${date}`);
-      lines.push(...entries);
+    const order = ['Today', 'Yesterday', 'Last Week', 'Older', 'Unknown'];
+    const lines: string[] = ['📜 Watch History', ''];
+    for (const section of order) {
+      const entries = groups[section];
+      if (!entries || entries.length === 0) continue;
+      lines.push(`*${section}*`);
+      lines.push(...entries.slice(0, 10));
       lines.push('');
     }
 
-    await ctx.reply(lines.join('\n'));
+    await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
   } catch (err) {
     logger.error('history render error', err);
     await ctx.reply('Failed to load history');
