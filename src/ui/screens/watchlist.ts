@@ -3,18 +3,9 @@ import type { TraktService } from '../../services/trakt';
 import type { OAuthService } from '../../services/oauth';
 import { buildItemActions, buildNavKeyboard } from '../menus';
 import { encodeCallback } from '../../utils/callbackData';
+import { extractPoster } from '../../utils/images';
 import logger from '../../utils/logger';
 
-function extractPoster(item: any): string | undefined {
-  const movie = item.movie ?? item;
-  const show = item.show ?? item;
-  const images = movie?.images ?? show?.images ?? item.images;
-  if (!images) return undefined;
-  if (typeof images.poster === 'string') return images.poster as string;
-  if (Array.isArray(images.poster) && images.poster.length) return images.poster[0];
-  if (typeof images.poster === 'object') return (images.poster as any).full || (images.poster as any).thumb;
-  return undefined;
-}
 
 export async function renderWatchlist(ctx: Context, traktService: TraktService, oauthService: OAuthService, page = 1) {
   const telegramId = ctx.from?.id;

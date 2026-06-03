@@ -4,15 +4,7 @@ import type { OAuthService } from '../../services/oauth';
 import { buildItemActions, buildNavKeyboard } from '../menus';
 import { encodeCallback } from '../../utils/callbackData';
 import logger from '../../utils/logger';
-
-function extractPoster(item: any): string | undefined {
-  const images = item.movie?.images ?? item.show?.images ?? item.images;
-  if (!images) return undefined;
-  if (typeof images.poster === 'string') return images.poster as string;
-  if (Array.isArray(images.poster) && images.poster.length) return images.poster[0];
-  if (typeof images.poster === 'object') return (images.poster as any).full || (images.poster as any).thumb;
-  return undefined;
-}
+import { extractPoster } from '../../utils/images';
 
 export async function renderRecommendations(ctx: Context, traktService: TraktService, oauthService: OAuthService, page = 1) {
   const telegramId = ctx.from?.id;
