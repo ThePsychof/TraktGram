@@ -49,6 +49,51 @@ export interface TraktShowBase {
   images?: TraktImages;
 }
 
+export interface TraktProgressEpisode {
+  season?: number;
+  number?: number;
+  title?: string;
+  ids?: TraktIds;
+  completed?: boolean;
+  last_watched_at?: string;
+  plays?: number;
+  rating?: number;
+  overview?: string;
+}
+
+export interface TraktProgressSeason {
+  number?: number;
+  aired?: number;
+  completed?: number;
+  episodes?: TraktProgressEpisode[];
+}
+
+export interface TraktShowProgress {
+  aired?: number;
+  completed?: number;
+  aired_episodes?: number;
+  completed_episodes?: number;
+  last_watched_at?: string;
+  next_episode?: TraktProgressEpisode;
+  last_episode?: TraktProgressEpisode;
+  seasons?: TraktProgressSeason[];
+  hidden_seasons?: number[];
+}
+
+export interface TraktEpisodeBase {
+  title?: string;
+  season?: number;
+  number?: number;
+  ids?: TraktIds;
+  overview?: string;
+  rating?: number;
+  votes?: number;
+  runtime?: number;
+  first_aired?: string;
+  images?: TraktImages;
+  show?: TraktShowBase;
+}
+
 export interface TraktTrendingItem {
   watchers: number;
   movie: TraktMovieBase;
