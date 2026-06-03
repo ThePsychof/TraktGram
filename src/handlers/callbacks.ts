@@ -102,7 +102,7 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
       }
 
       if (action === 'search') {
-        await ctx.reply('🔍 Search movies and shows\n\nUse /search <title> or just type a title in this chat.\n\nExamples:\n/search Dune\n/search The Bear');
+        await ctx.reply('🔍 Use inline search:\n\nType @TraktGram_Bot followed by a movie or show title in ANY chat.\n\nExamples:\n@TraktGram_Bot Dune\n@TraktGram_Bot The Bear\n\nResults will appear as cards below!');
         await ctx.answerCallbackQuery();
         return;
       }
@@ -260,21 +260,6 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
       if (action === 'logout') {
         if (!oauthService || !ctx.from) { await ctx.answerCallbackQuery({ text: 'Not authenticated', show_alert: true }); return; }
         try { await oauthService.logout(ctx.from.id); await ctx.answerCallbackQuery({ text: 'Logged out', show_alert: false }); await renderHome(ctx, oauthService); } catch (err) { logger.error('logout error', err); await ctx.answerCallbackQuery({ text: 'Logout failed', show_alert: true }); }
-        return;
-      }
-
-      if (action === 'search_result') {
-        const q = params.q || '';
-        const i = Number(params.i || '0');
-        if (!q) { await ctx.answerCallbackQuery({ text: 'No query', show_alert: true }); return; }
-        try {
-          const { renderSearchResults } = await import('../ui/screens/search');
-          await renderSearchResults(ctx, traktService, oauthService as any, q, i);
-          await ctx.answerCallbackQuery();
-        } catch (err) {
-          logger.error('search result error', err);
-          await ctx.answerCallbackQuery({ text: 'Failed to load results', show_alert: true });
-        }
         return;
       }
 

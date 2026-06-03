@@ -5,7 +5,6 @@ import { registerHelp } from './commands/help';
 import { registerTrending } from './commands/trending';
 import { registerLogin } from './commands/login';
 import { registerMe } from './commands/me';
-import { registerSearch } from './commands/search';
 import { registerInlineQuery } from './handlers/inline';
 import type { TraktService } from './services/trakt';
 import type { OAuthService } from './services/oauth';
@@ -18,7 +17,6 @@ export function createBot(token: string, traktService: TraktService, oauthServic
   registerPing(bot);
   registerHelp(bot);
   registerTrending(bot, traktService);
-  registerSearch(bot, traktService);
   registerInlineQuery(bot, traktService);
 
   // Register OAuth-based commands if OAuthService is available

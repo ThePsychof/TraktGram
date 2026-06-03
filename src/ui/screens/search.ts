@@ -21,11 +21,16 @@ export async function renderSearchResults(ctx: Context, traktService: TraktServi
   }
 
   try {
+    logger.info('Searching for:', { query, index });
     const results = await traktService.searchMulti(query, 20);
+    
     if (!results || results.length === 0) {
+      logger.warn('No results found', { query });
       await ctx.reply(`No results found for "${query}".`);
       return;
     }
+
+    logger.info('Found results', { count: results.length });
 
     const idx = Math.max(0, Math.min(results.length - 1, index));
     const result = results[idx];
@@ -46,21 +51,24 @@ export async function renderSearchResults(ctx: Context, traktService: TraktServi
     const actions = buildItemActions({ type: type as string, id: itemId });
     const addWatchlistCb = encodeCallback('add_watchlist', { t: type, id: itemId });
 
-    const navRow = [];
-    if (idx > 0) navRow.push({ text: '◀ Previous', callback_data: encodeCallback('search_result', { q: query.slice(0, 30), i: idx - 1 }) });
-    if (idx < results.length - 1) navRow.push({ text: 'Next ▶', callback_data: encodeCallback('search_result', { q: query.slice(0, 30), i: idx + 1 }) });
+    const navRow: any[] = [];
+    if (idx > 0) navRow.push({ text: '◀ Previous', callback_data: encodeCallback('search_result', { q: query.slice(0, 25), i: idx - 1 }) });
+    if (idx < results.length - 1) navRow.push({ text: 'Next ▶', callback_data: encodeCallback('search_result', { q: query.slice(0, 25), i: idx + 1 }) });
     navRow.push({ text: '🏠 Home', callback_data: encodeCallback('home') });
 
+    const keyboard = [
+      ...(actions.inline_keyboard ?? []),
+      [[{ text: '➕ Watchlist', callback_data: addWatchlistCb }]],
+      [navRow]
+    ];
+
     if (poster) {
-      await ctx.replyWithPhoto(poster, {
-        caption,
-        reply_markup: { inline_keyboard: [...(actions.inline_keyboard ?? []), [[{ text: '➕ Watchlist', callback_data: addWatchlistCb }]], [navRow]] },
-      });
+      await ctx.replyWithPhoto(poster, { caption, reply_markup: { inline_keyboard: keyboard } });
     } else {
-      await ctx.reply(caption, { reply_markup: { inline_keyboard: [...(actions.inline_keyboard ?? []), [[{ text: '➕ Watchlist', callback_data: addWatchlistCb }]], [navRow]] } });
+      await ctx.reply(caption, { reply_markup: { inline_keyboard: keyboard } });
     }
   } catch (error) {
     logger.error('Search error', error);
-    await ctx.reply('Failed to search. Try again later.');
+    await ctx.reply(`Failed to search for "${query}". Try again later.`);
   }
 }
