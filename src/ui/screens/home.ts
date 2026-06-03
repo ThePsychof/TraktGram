@@ -1,4 +1,5 @@
-import type { Context, InlineKeyboardMarkup } from 'grammy';
+import type { Context } from 'grammy';
+import type { InlineKeyboardMarkup } from '@grammyjs/types';
 import { buildMainMenu } from '../menus';
 import type { OAuthService } from '../../services/oauth';
 

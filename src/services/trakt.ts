@@ -84,6 +84,34 @@ export class TraktService {
     }
   }
 
+  private async requestAuth<T>(path: string, accessToken: string, method = 'GET', body?: unknown): Promise<T> {
+    const url = `${this.base}${path}`;
+    const headers = this.getAuthHeaders(accessToken);
+    if (body) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const text = await res.text();
+    if (!res.ok) {
+      logger.error('Trakt authenticated request failed', { url, status: res.status, body: text.slice(0, 1000) });
+      throw new Error(`Trakt API returned ${res.status}`);
+    }
+
+    try {
+      const json = JSON.parse(text) as unknown as T;
+      return json;
+    } catch (error) {
+      logger.error('Failed to parse JSON from authenticated Trakt response', error);
+      throw new Error('Invalid Trakt response');
+    }
+  }
+
   async getTrendingMovies(limit = 5): Promise<TraktTrendingItem[]> {
     return await this.request<TraktTrendingItem[]>(`/movies/trending?limit=${limit}&extended=full,images`);
   }
@@ -106,7 +134,7 @@ export class TraktService {
       logger.error('Failed fetching watchlist', { status: res.status, body: body.slice(0, 1000) });
       throw new Error(`Trakt watchlist returned ${res.status}`);
     }
-    const json = await res.json();
+    const json = (await res.json()) as any[];
     this.cache.set(cacheKey, json, 60 * 2);
     return json;
   }
@@ -234,6 +262,50 @@ export class TraktService {
       throw new Error(`Trakt user stats returned ${res.status}`);
     }
     return await res.json();
+  }
+
+  async getItemById(type: 'movie' | 'show', id: number): Promise<any> {
+    return await this.request<any>(`/${type}s/${id}?extended=full,images`);
+  }
+
+  async getUserRating(accessToken: string, type: 'movie' | 'show', id: number): Promise<number | null> {
+    try {
+      const response = await this.requestAuth<any>(`/sync/ratings/${type}/${id}`, accessToken);
+      return response.rating ?? null;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async getWatchlistStatus(accessToken: string, type: 'movie' | 'show', id: number): Promise<boolean> {
+    try {
+      await this.requestAuth<any>(`/sync/watchlist/${type}/${id}`, accessToken);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async getWatchedSummary(accessToken: string, type: 'movie' | 'show', id: number): Promise<any | null> {
+    try {
+      return await this.requestAuth<any>(`/sync/watched/${type}s/${id}`, accessToken);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async getItemCast(type: 'movie' | 'show', id: number): Promise<TraktCastEntry[]> {
+    const response = await this.request<TraktPeopleResponse>(`/${type}s/${id}/people?extended=full`);
+    return response.cast ?? [];
   }
 
   private getItemPath(ids: TraktIds | undefined): string | null {

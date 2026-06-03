@@ -47,7 +47,11 @@ export async function renderContinueWatching(ctx: Context, traktService: TraktSe
     const itemId = (item.movie?.ids?.trakt ?? item.show?.ids?.trakt ?? item.ids?.trakt) as number | undefined;
     const actions = buildItemActions({ type: itemType, id: itemId });
 
-    const nav = buildNavKeyboard('continue', page, idx > 0, idx < total - 1, { t: itemType, id: itemId });
+    const extraParams: Record<string, string | number> = { t: itemType };
+    if (itemId !== undefined) {
+      extraParams.id = itemId;
+    }
+    const nav = buildNavKeyboard('continue', page, idx > 0, idx < total - 1, extraParams);
 
     if (poster) {
       await ctx.replyWithPhoto(poster, { caption, reply_markup: { inline_keyboard: [...(actions.inline_keyboard ?? []), ...(nav.inline_keyboard ?? [])] } });

@@ -64,7 +64,8 @@ function buildArticleResult(
 async function resolveInlineResult(
   item: TraktSearchItem,
   index: number,
-  traktService: TraktService
+  traktService: TraktService,
+  botUsername: string
 ): Promise<InlineQueryResultArticle> {
   const id = getResultId(item, index);
   const meta = item.movie ?? item.show;
@@ -74,7 +75,16 @@ async function resolveInlineResult(
   const cast = await traktService.getCastForItem(item);
   const caption = buildMessageCaption(item, cast);
   const posterUrl = getPosterUrlFromItem(item);
-  const replyMarkup = buildTraktReplyMarkup(resultType, meta?.ids);
+  const traktId = meta?.ids?.trakt;
+
+  const replyMarkup: InlineKeyboardMarkup = {
+    inline_keyboard: [
+      ...(buildTraktReplyMarkup(resultType, meta?.ids).inline_keyboard ?? []),
+      ...(traktId
+        ? [[{ text: '⚡ Manage in TraktGram', url: `https://t.me/${botUsername}?start=${resultType}_${traktId}` }]]
+        : []),
+    ],
+  };
 
   return buildArticleResult(id, title, description, caption, posterUrl, replyMarkup);
 }
@@ -85,6 +95,7 @@ export function registerInlineQuery(
 ) {
   bot.on('inline_query', async (ctx) => {
     const query = ctx.inlineQuery.query?.trim() ?? '';
+    const botUsername = String((ctx as any).botInfo?.username ?? 'TraktGram_Bot');
     const results: InlineQueryResult[] = [];
 
     if (!query) {
@@ -92,7 +103,7 @@ export function registerInlineQuery(
         const trending = await traktService.getTrendingMovies(8);
         for (const [index, item] of trending.entries()) {
           const searchItem: TraktSearchItem = { type: 'movie', movie: item.movie };
-          const result = await resolveInlineResult(searchItem, index, traktService);
+          const result = await resolveInlineResult(searchItem, index, traktService, botUsername);
           results.push(result);
         }
       } catch (error) {
@@ -118,7 +129,7 @@ export function registerInlineQuery(
       }
 
       for (const [index, item] of filtered.entries()) {
-        const result = await resolveInlineResult(item, index, traktService);
+        const result = await resolveInlineResult(item, index, traktService, botUsername);
         results.push(result);
       }
 

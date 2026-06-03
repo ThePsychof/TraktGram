@@ -16,7 +16,7 @@ interface Env {
   STORE?: KVNamespace; // Cloudflare KV namespace for storing OAuth data
 }
 
-let bot = null as ReturnType<typeof createBot> | null;
+let bot: (ReturnType<typeof createBot> extends Promise<infer B> ? B : never) | null = null;
 let botToken: string | undefined;
 let oauthService: OAuthService | null = null;
 
@@ -171,13 +171,13 @@ export default {
         }
       }
 
-      bot = createBot(env.BOT_TOKEN, traktService, oauthService || undefined);
+      bot = await createBot(env.BOT_TOKEN, traktService, oauthService || undefined);
       botToken = env.BOT_TOKEN;
       await bot.init();
     }
 
     const update = await request.json() as Update;
-    ctx.waitUntil(bot.handleUpdate(update).catch((err) => {
+    ctx.waitUntil(bot!.handleUpdate(update).catch((err: unknown) => {
       logger.error('Error handling update:', err);
     }));
 

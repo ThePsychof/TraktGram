@@ -32,7 +32,7 @@ export function registerSearch(bot: Bot, traktService: TraktService) {
       if (ctx.chat.type !== 'private') return;
 
       // Ignore if replying to someone else's message
-      const isReplyToBot = ctx.message.reply_to_message?.from?.id === ctx.botInfo.id;
+      const isReplyToBot = ctx.message.reply_to_message?.from?.id === (ctx as any).botInfo?.id;
       if (ctx.message.reply_to_message && !isReplyToBot) return;
 
       const text = ctx.message.text.trim();

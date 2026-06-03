@@ -8,6 +8,7 @@ import { renderDetails } from '../ui/screens/details';
 import { renderHistory } from '../ui/screens/history';
 import { renderAccount } from '../ui/screens/account';
 import { renderRecommendations } from '../ui/screens/recommendations';
+import { buildManagementKeyboard, buildRatingKeyboard } from '../ui/menus';
 import logger from '../utils/logger';
 import { decodeCallback, encodeCallback } from '../utils/callbackData';
 
@@ -139,7 +140,25 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
       if (action === 'markwatched') {
         // present choices: Watched Now
         const confirmCb = encodeCallback('markwatched_now', { t: params.t, id: params.id });
-        await ctx.editMessageReplyMarkup({ inline_keyboard: [[{ text: '✅ Watched Now', callback_data: confirmCb }], [{ text: '🏠 Home', callback_data: encodeCallback('home') }]] });
+        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [[{ text: '✅ Watched Now', callback_data: confirmCb }], [{ text: '🏠 Home', callback_data: encodeCallback('home') }]] } });
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
+      if (action === 'rate_prompt') {
+        const keyboard = buildRatingKeyboard('rate', { t: params.t, id: params.id });
+        await ctx.editMessageReplyMarkup({ reply_markup: keyboard });
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
+      if (action === 'similar') {
+        const page = Number(params.page || '1');
+        if (!oauthService) {
+          await ctx.answerCallbackQuery({ text: 'Connect Trakt to view similar items', show_alert: true });
+          return;
+        }
+        await renderRecommendations(ctx, traktService, oauthService, page);
         await ctx.answerCallbackQuery();
         return;
       }
@@ -229,6 +248,17 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
           } else {
             await traktService.removeFromWatchlist(accessToken, payload);
             await ctx.answerCallbackQuery({ text: '❌ Removed from watchlist', show_alert: false });
+          }
+
+          try {
+            const updatedKeyboard = buildManagementKeyboard({
+              type: t,
+              id,
+              inWatchlist: action === 'add_watchlist',
+            });
+            await ctx.editMessageReplyMarkup({ reply_markup: updatedKeyboard });
+          } catch {
+            // ignore if edit fails
           }
         } catch (err) {
           logger.error('Failed updating watchlist', err);

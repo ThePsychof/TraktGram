@@ -53,9 +53,13 @@ export async function renderWatchlist(ctx: Context, traktService: TraktService, 
     const actions = buildItemActions({ type: itemType, id: itemId });
     // Add explicit remove button
     const removeCb = encodeCallback('remove_watchlist', { t: itemType, id: itemId });
-    const nav = buildNavKeyboard('watchlist', page, idx > 0, idx < total - 1, { t: itemType, id: itemId });
+    const extraParams: Record<string, string | number> = { t: itemType };
+    if (itemId !== undefined) {
+      extraParams.id = itemId;
+    }
+    const nav = buildNavKeyboard('watchlist', page, idx > 0, idx < total - 1, extraParams);
 
-    const combinedKeyboard = [ ...(actions.inline_keyboard ?? []), [[{ text: '❌ Remove', callback_data: removeCb }]], ...(nav.inline_keyboard ?? []) ];
+    const combinedKeyboard = [ ...(actions.inline_keyboard ?? []), [[{ text: '❌ Remove', callback_data: removeCb }]], ...(nav.inline_keyboard ?? []) ] as any[][];
 
     if (poster) {
       await ctx.replyWithPhoto(poster, { caption, reply_markup: { inline_keyboard: combinedKeyboard } });

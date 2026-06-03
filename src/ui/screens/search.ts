@@ -59,8 +59,8 @@ export async function renderSearchResults(ctx: Context, traktService: TraktServi
     const keyboard = [
       ...(actions.inline_keyboard ?? []),
       [[{ text: '➕ Watchlist', callback_data: addWatchlistCb }]],
-      [navRow]
-    ];
+      [navRow],
+    ] as any[][];
 
     if (poster) {
       await ctx.replyWithPhoto(poster, { caption, reply_markup: { inline_keyboard: keyboard } });
