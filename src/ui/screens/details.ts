@@ -98,6 +98,7 @@ export async function renderDetails(ctx: Context, traktService: TraktService, oa
       id,
       inWatchlist: watchlistStatus ?? false,
       traktUrl,
+      authenticated,
     });
 
     const caption = captionLines.join('\n');

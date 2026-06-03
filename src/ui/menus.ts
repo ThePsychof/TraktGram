@@ -38,9 +38,21 @@ export function buildItemActions(opts: { type: string; id?: number | string; pag
   } as InlineKeyboardMarkup;
 }
 
-export function buildManagementKeyboard(opts: { type: string; id: number | string; inWatchlist?: boolean; traktUrl?: string }): InlineKeyboardMarkup {
+export function buildManagementKeyboard(opts: { type: string; id: number | string; inWatchlist?: boolean; traktUrl?: string; authenticated?: boolean }): InlineKeyboardMarkup {
   const itemType = opts.type;
   const itemId = opts.id;
+  const authenticated = opts.authenticated ?? true;
+
+  if (!authenticated) {
+    return {
+      inline_keyboard: [
+        [{ text: '🔐 Connect Trakt', callback_data: encodeCallback('connect') }],
+        [{ text: '🎬 Trakt', url: opts.traktUrl ?? `https://trakt.tv/${itemType}s/${itemId}` }],
+        [{ text: '🏠 Home', callback_data: encodeCallback('home') }],
+      ],
+    } as InlineKeyboardMarkup;
+  }
+
   const watchlistCb = opts.inWatchlist ? encodeCallback('remove_watchlist', { t: itemType, id: itemId }) : encodeCallback('add_watchlist', { t: itemType, id: itemId });
   const watchlistText = opts.inWatchlist ? '❌ Remove from Watchlist' : '➕ Add to Watchlist';
 
