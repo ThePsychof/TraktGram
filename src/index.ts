@@ -216,7 +216,6 @@ export default {
 
       bot = await createBot(env.BOT_TOKEN, traktServiceInstance, botOAuthService || undefined, getMiniAppUrl(env, request));
       botToken = env.BOT_TOKEN;
-      await bot.init();
     }
 
     const update = await request.json() as Update;
