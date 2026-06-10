@@ -10,8 +10,8 @@ import logger from './utils/logger';
 
 interface Env {
   BOT_TOKEN: string;
-  TRAKT_CLIENT_ID: string;
-  TRAKT_CLIENT_SECRET: string;
+  TRAKT_CLIENT_ID?: string;
+  TRAKT_CLIENT_SECRET?: string;
   TRAKT_API_KEY?: string; // fallback for legacy deployments
   WEBHOOK_SECRET?: string;
   OAUTH_REDIRECT_URI?: string; // Optional, defaults to https://<worker-domain>/auth/callback
@@ -36,11 +36,12 @@ function getTraktApiKey(env: Env): string | null {
   return env.TRAKT_CLIENT_ID ?? env.TRAKT_API_KEY ?? null;
 }
 
-function createTraktService(env: Env): TraktService {
+function createTraktService(env: Env): TraktService | null {
   if (!traktServiceInstance) {
     const traktApiKey = getTraktApiKey(env);
     if (!traktApiKey) {
-      throw new Error('Trakt API key not configured');
+      logger.warn('Trakt API key not configured; bot will run with limited functionality');
+      return null;
     }
     traktServiceInstance = new TraktService(traktApiKey);
   }
@@ -164,14 +165,7 @@ export default {
       return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
-    let traktService: TraktService;
-    try {
-      traktService = createTraktService(env);
-    } catch (error) {
-      logger.error('Trakt API key not configured', error);
-      return new Response('Internal Server Error', { status: 500 });
-    }
-
+    const traktService = createTraktService(env);
     const localOAuthService = createOAuthService(env, request);
     const miniAppResponse = await handleMiniAppApiRequest(request, url, traktService, localOAuthService ?? undefined);
     if (miniAppResponse) {
