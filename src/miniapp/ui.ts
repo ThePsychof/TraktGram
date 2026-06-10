@@ -1,42 +1,56 @@
 export function renderMiniAppPage(deepLink?: string) {
-  const encodedDeepLink = deepLink ? `?deepLink=${encodeURIComponent(deepLink)}` : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TraktGram Mini App</title>
+  <title>Trakt</title>
   <style>
-    body { margin: 0; font-family: system-ui, sans-serif; background: #0d0f14; color: #f5f7fb; }
-    header { padding: 16px; background: #141722; box-shadow: inset 0 -1px 0 rgba(255,255,255,.05); }
-    h1 { margin: 0; font-size: 1.3rem; }
-    p { margin: 8px 0; color: #adc4e0; }
-    nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
-    button { border: 0; border-radius: 999px; padding: 10px 16px; background: #1e232e; color: #f5f7fb; cursor: pointer; transition: background .2s ease; }
-    button.active, button:hover { background: #2d3445; }
-    main { padding: 16px; }
-    .card { background: #141722; border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
-    .card h2 { margin: 0 0 6px; font-size: 1rem; }
-    .card p { margin: 4px 0; line-height: 1.4; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-    .link-button { background: #2563eb; }
-    .small { color: #91a6d4; font-size: .9rem; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000; color: #fff; }
+    header { background: #1a1a1a; padding: 12px 16px; border-bottom: 1px solid #222; position: sticky; top: 0; z-index: 100; }
+    header h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.5px; color: #e50000; }
+    main { max-width: 100%; }
+    nav { display: flex; gap: 6px; padding: 12px 16px 0; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid #222; }
+    nav::-webkit-scrollbar { display: none; }
+    nav button { background: transparent; border: none; color: #999; padding: 8px 12px; cursor: pointer; font-size: 13px; white-space: nowrap; flex-shrink: 0; transition: all 0.2s; font-weight: 500; }
+    nav button:hover { color: #fff; }
+    nav button.active { color: #e50000; border-bottom: 2px solid #e50000; }
+    .content { padding: 16px; max-width: 900px; margin: 0 auto; }
+    .status { padding: 12px 16px; background: #1a1a1a; border-radius: 4px; margin-bottom: 16px; color: #999; font-size: 13px; }
+    .status.error { color: #ff6b6b; }
     .hidden { display: none; }
-    .status { padding: 12px 16px; background: #171d29; border-radius: 16px; margin-bottom: 16px; }
-    .spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid rgba(255,255,255,.15); border-top-color: #5b84ff; border-radius: 50%; animation: spin 1s linear infinite; vertical-align: middle; margin-right: 8px; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .card { background: #141414; border-radius: 6px; padding: 16px; margin-bottom: 12px; border: 1px solid #222; transition: all 0.2s; }
+    .card:hover { border-color: #333; }
+    .card h2 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+    .card p { margin: 4px 0; color: #999; font-size: 13px; line-height: 1.5; }
+    .card .meta { color: #666; font-size: 12px; }
+    .card .actions { display: flex; gap: 8px; margin-top: 12px; }
+    .btn { background: #e50000; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .btn:hover { background: #ff0000; }
+    .btn-secondary { background: #2a2a2a; color: #fff; }
+    .btn-secondary:hover { background: #3a3a3a; }
+    .list-item { background: #0a0a0a; border-left: 3px solid #e50000; padding: 12px 16px; margin-bottom: 8px; border-radius: 2px; cursor: pointer; transition: all 0.2s; }
+    .list-item:hover { background: #141414; border-left-color: #ff0000; }
+    .item-title { font-size: 14px; font-weight: 500; }
+    .item-meta { font-size: 12px; color: #666; margin-top: 4px; }
+    .section-title { margin: 20px 0 12px; font-size: 14px; font-weight: 600; color: #999; }
+    .empty { text-align: center; padding: 40px 20px; color: #666; font-size: 13px; }
+    .profile-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
+    .stat { background: #0a0a0a; padding: 12px; border-radius: 4px; text-align: center; border: 1px solid #222; }
+    .stat-value { font-size: 20px; font-weight: 700; color: #e50000; }
+    .stat-label { font-size: 11px; color: #666; margin-top: 4px; }
   </style>
 </head>
 <body>
   <header>
-    <h1>TraktGram Mini App</h1>
-    <p id="subtitle">Your primary Trakt experience inside Telegram.</p>
+    <h1>trakt</h1>
   </header>
-  <main>
-    <nav id="nav"></nav>
+  <nav id="nav"></nav>
+  <div class="content">
     <section id="status" class="status hidden"></section>
     <section id="screen"></section>
-  </main>
+  </div>
   <script>
     const webApp = window.Telegram?.WebApp ?? null;
     if (webApp) {
@@ -54,13 +68,12 @@ export function renderMiniAppPage(deepLink?: string) {
 
     function setStatus(message, isError = false) {
       status.classList.remove('hidden');
-      status.style.color = isError ? '#ff9e8f' : '#a4c7ff';
+      status.classList.toggle('error', isError);
       status.textContent = message;
     }
 
     function clearStatus() {
       status.classList.add('hidden');
-      status.textContent = '';
     }
 
     function parseTelegramId() {
@@ -73,17 +86,17 @@ export function renderMiniAppPage(deepLink?: string) {
       return initUser?.id ? String(initUser.id) : null;
     }
 
-    function buildEndpoint(path) {
-      const url = new URL(path, location.origin);
-      const telegramId = state.telegramId;
-      if (telegramId) url.searchParams.set('telegramId', telegramId);
-      return url.toString();
-    }
-
     async function fetchJson(path) {
       setStatus('Loading...');
       try {
-        const response = await fetch(buildEndpoint(path));
+        const url = new URL(path, location.origin);
+        const options = {
+          headers: {}
+        };
+        if (state.telegramId) {
+          options.headers['x-telegram-user-id'] = state.telegramId;
+        }
+        const response = await fetch(url.toString(), options);
         if (!response.ok) {
           const error = await response.json().catch(() => ({}));
           throw new Error(error.error || response.statusText || 'Request failed');
@@ -101,11 +114,11 @@ export function renderMiniAppPage(deepLink?: string) {
       nav.innerHTML = '';
       const items = [
         { id: 'home', label: 'Home' },
-        { id: 'continue', label: 'Continue Watching' },
+        { id: 'trending', label: 'Trending' },
+        { id: 'continue', label: 'Watching' },
         { id: 'calendar', label: 'Calendar' },
         { id: 'watchlist', label: 'Watchlist' },
         { id: 'history', label: 'History' },
-        { id: 'recommendations', label: 'Recommendations' },
         { id: 'profile', label: 'Profile' },
       ];
       items.forEach((item) => {
@@ -121,218 +134,195 @@ export function renderMiniAppPage(deepLink?: string) {
       state.screen = screen;
       renderNav();
       if (screen === 'home') renderHome();
+      if (screen === 'trending') renderTrending();
       if (screen === 'continue') renderContinue();
       if (screen === 'calendar') renderCalendar();
       if (screen === 'watchlist') renderWatchlist();
       if (screen === 'history') renderHistory();
-      if (screen === 'recommendations') renderRecommendations();
       if (screen === 'profile') renderProfile();
     }
 
-    function renderItemCard(item, type) {
+    function renderItemCard(item, type, compact = true) {
+      if (compact) {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        const title = document.createElement('div');
+        title.className = 'item-title';
+        title.textContent = item.title || item.name || 'Untitled';
+        const meta = document.createElement('div');
+        meta.className = 'item-meta';
+        const year = item.year || item.first_aired?.slice(0, 4) || '';
+        meta.textContent = [type.toUpperCase(), year].filter(Boolean).join(' • ');
+        div.appendChild(title);
+        div.appendChild(meta);
+        div.addEventListener('click', () => showDetails(type, item.ids?.trakt || item.id));
+        return div;
+      }
       const card = document.createElement('article');
       card.className = 'card';
-
       const title = document.createElement('h2');
       title.textContent = item.title || item.name || 'Untitled';
       card.appendChild(title);
-
       const meta = document.createElement('p');
-      meta.className = 'small';
+      meta.className = 'meta';
       const year = item.year || item.first_aired?.slice(0, 4) || '';
       meta.textContent = [type.toUpperCase(), year].filter(Boolean).join(' • ');
       card.appendChild(meta);
-
-      const overview = document.createElement('p');
-      overview.textContent = item.overview || item.tagline || 'No description available.';
-      card.appendChild(overview);
-
-      const row = document.createElement('div');
-      row.className = 'row';
+      if (item.overview || item.tagline) {
+        const overview = document.createElement('p');
+        overview.textContent = item.overview || item.tagline || '';
+        card.appendChild(overview);
+      }
+      const actions = document.createElement('div');
+      actions.className = 'actions';
       const detailsButton = document.createElement('button');
-      detailsButton.textContent = 'Open Details';
-      detailsButton.className = 'link-button';
+      detailsButton.className = 'btn';
+      detailsButton.textContent = 'View';
       detailsButton.addEventListener('click', () => showDetails(type, item.ids?.trakt || item.id));
-      row.appendChild(detailsButton);
-      card.appendChild(row);
-
+      actions.appendChild(detailsButton);
+      card.appendChild(actions);
       return card;
     }
 
-    function renderList(titleText, items, type) {
-      root.innerHTML = '<h2>' + titleText + '</h2>';
+    function renderList(titleText, items, type, compact = true) {
+      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">' + titleText + '</h2>';
       if (!items || items.length === 0) {
-        root.innerHTML += '<p>No items found.</p>';
+        root.innerHTML += '<div class="empty">No items</div>';
         return;
       }
       items.forEach((item) => {
-        const card = renderItemCard(item, type);
+        const card = renderItemCard(item, type, compact);
         root.appendChild(card);
       });
     }
 
     async function renderHome() {
-      root.innerHTML = '<h2>Home</h2><p>Fetching your personalized Trakt overview...</p>';
+      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Home</h2><div class="status">Loading...</div>';
       try {
         const trendingPromise = fetchJson('/api/miniapp/public/trending?limit=5');
-        const continuePromise = fetchJson('/api/miniapp/user/continue?limit=5');
-        const profilePromise = fetchJson('/api/miniapp/user/profile');
-        const [trending, continueData, profile] = await Promise.allSettled([trendingPromise, continuePromise, profilePromise]);
-
-        root.innerHTML = '<h2>Home</h2>';
-        if (profile.status === 'fulfilled') {
-          const summary = document.createElement('div');
-          summary.className = 'card';
-          summary.innerHTML = '<strong>Welcome, ' + (profile.value.profile.username || 'guest') + '</strong><p class="small">Movies watched: ' + (profile.value.profile.stats.movies?.watched ?? 0) + ' • Episodes watched: ' + (profile.value.profile.stats.episodes?.watched ?? 0) + '</p>';
-          root.appendChild(summary);
+        const continuePromise = fetchJson('/api/miniapp/user/continue?limit=5').catch(() => ({ items: [] }));
+        const [trending, continueData] = await Promise.allSettled([trendingPromise, continuePromise]);
+        root.innerHTML = '';
+        
+        const trendingData = trending.status === 'fulfilled' ? trending.value : { items: [] };
+        if (trendingData.items && trendingData.items.length > 0) {
+          const title = document.createElement('h2');
+          title.className = 'section-title';
+          title.textContent = 'Trending Now';
+          root.appendChild(title);
+          trendingData.items.forEach((item) => {
+            root.appendChild(renderItemCard(item, item.type === 'show' ? 'show' : 'movie', true));
+          });
         }
 
-        const section = document.createElement('section');
-        section.innerHTML = '<h3>Continue Watching</h3>';
-        root.appendChild(section);
-        if (continueData.status === 'fulfilled' && continueData.value.items.length) {
-          continueData.value.items.slice(0, 4).forEach((item) => root.appendChild(renderItemCard(item, item.movie ? 'movie' : 'show')));
-        } else {
-          root.innerHTML += '<p>No active playback items.</p>';
+        const continueDataItems = continueData.status === 'fulfilled' ? continueData.value : { items: [] };
+        if (continueDataItems.items && continueDataItems.items.length > 0) {
+          const title = document.createElement('h2');
+          title.className = 'section-title';
+          title.textContent = 'Continue Watching';
+          root.appendChild(title);
+          continueDataItems.items.forEach((item) => {
+            root.appendChild(renderItemCard(item, 'show', true));
+          });
         }
 
-        root.innerHTML += '<h3>Trending</h3>';
-        if (trending.status === 'fulfilled' && trending.value.items.length) {
-          trending.value.items.slice(0, 4).forEach((item) => root.appendChild(renderItemCard(item.movie || item.show || item, item.type || (item.movie ? 'movie' : 'show'))));
-        } else {
-          root.innerHTML += '<p>Unable to load trending items.</p>';
+        if (root.children.length === 0) {
+          root.innerHTML = '<div class="empty">No data available</div>';
         }
       } catch (error) {
-        root.innerHTML = '<p>Failed to load home screen.</p>';
+        root.innerHTML = '<div class="empty">Unable to load home</div>';
+      }
+    }
+
+    async function renderTrending() {
+      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Trending</h2><div class="status">Loading...</div>';
+      try {
+        const data = await fetchJson('/api/miniapp/public/trending?limit=20');
+        renderList('Trending', data.items, 'movie', true);
+      } catch (error) {
+        root.innerHTML = '<div class="empty">Unable to load trending</div>';
       }
     }
 
     async function renderContinue() {
-      root.innerHTML = '<h2>Continue Watching</h2>';
+      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Continue Watching</h2><div class="status">Loading...</div>';
       try {
         const data = await fetchJson('/api/miniapp/user/continue?limit=20');
-        if (!data.items.length) {
-          root.innerHTML += '<p>No items to continue.</p>';
-          return;
-        }
-        data.items.forEach((item) => root.appendChild(renderItemCard(item, item.movie ? 'movie' : 'show')));
+        renderList('Continue Watching', data.items, 'show', true);
       } catch (error) {
-        root.innerHTML += '<p>Unable to fetch continue watching.</p>';
+        root.innerHTML = '<div class="empty">Unable to load continue watching</div>';
       }
     }
 
     async function renderCalendar() {
-      root.innerHTML = '<h2>Calendar</h2>';
+      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Calendar</h2><div class="status">Loading...</div>';
       try {
-        const data = await fetchJson('/api/miniapp/user/calendar?days=7');
-        const items = [...(data?.shows ?? []), ...(data?.movies ?? [])];
-        if (!items.length) {
-          root.innerHTML += '<p>No upcoming items in the next 7 days.</p>';
+        const data = await fetchJson('/api/miniapp/user/calendar');
+        if (!data.items || data.items.length === 0) {
+          root.innerHTML = '<div class="empty">No upcoming episodes</div>';
           return;
         }
-        items.slice(0, 10).forEach((item) => {
-          const card = document.createElement('article');
-          card.className = 'card';
-          const title = document.createElement('h2');
-          const label = item.episode ? (item.show?.title || item.show?.name || 'Show') + ' - S' + item.episode.season + 'E' + item.episode.number : item.movie?.title || item.movie?.name || 'Movie';
+        root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Upcoming Episodes</h2>';
+        data.items.slice(0, 20).forEach((item) => {
+          const div = document.createElement('div');
+          div.className = 'list-item';
+          const title = document.createElement('div');
+          title.className = 'item-title';
+          const label = item.episode ? (item.show?.title || item.show?.name || 'Show') + ' - S' + item.episode.season + 'E' + item.episode.number : (item.movie?.title || item.movie?.name || 'Movie');
           title.textContent = label;
-          card.appendChild(title);
-          const subtitle = document.createElement('p');
-          subtitle.className = 'small';
-          subtitle.textContent = item.first_aired || item.released || 'Unknown date';
-          card.appendChild(subtitle);
-          root.appendChild(card);
+          const meta = document.createElement('div');
+          meta.className = 'item-meta';
+          meta.textContent = item.first_aired || item.released || 'Unknown date';
+          div.appendChild(title);
+          div.appendChild(meta);
+          root.appendChild(div);
         });
       } catch (error) {
-        root.innerHTML += '<p>Unable to fetch calendar.</p>';
+        root.innerHTML = '<div class="empty">Unable to load calendar</div>';
       }
     }
 
     async function renderWatchlist() {
-      root.innerHTML = '<h2>Watchlist</h2>';
+      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Watchlist</h2><div class="status">Loading...</div>';
       try {
-        const data = await fetchJson('/api/miniapp/user/watchlist?limit=20');
-        if (!data.items.length) {
-          root.innerHTML += '<p>Your watchlist is empty.</p>';
-          return;
-        }
-        data.items.forEach((item) => root.appendChild(renderItemCard(item.movie || item.show || item, item.movie ? 'movie' : 'show')));
+        const data = await fetchJson('/api/miniapp/user/watchlist');
+        renderList('Watchlist', data.items, 'movie', true);
       } catch (error) {
-        root.innerHTML += '<p>Unable to fetch watchlist.</p>';
+        root.innerHTML = '<div class="empty">Unable to load watchlist</div>';
       }
     }
 
     async function renderHistory() {
-      root.innerHTML = '<h2>History</h2>';
+      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">History</h2><div class="status">Loading...</div>';
       try {
-        const data = await fetchJson('/api/miniapp/user/history?limit=20');
-        if (!data.items.length) {
-          root.innerHTML += '<p>No recent history.</p>';
-          return;
-        }
-        data.items.forEach((item) => {
-          const card = document.createElement('article');
-          card.className = 'card';
-          const title = document.createElement('h2');
-          title.textContent = item.movie?.title || item.show?.title || item.title || 'History item';
-          card.appendChild(title);
-          const subtitle = document.createElement('p');
-          subtitle.className = 'small';
-          subtitle.textContent = item.watched_at ? new Date(item.watched_at).toLocaleString() : 'Unknown time';
-          card.appendChild(subtitle);
-          root.appendChild(card);
-        });
+        const data = await fetchJson('/api/miniapp/user/history');
+        renderList('History', data.items, 'history', true);
       } catch (error) {
-        root.innerHTML += '<p>Unable to fetch history.</p>';
-      }
-    }
-
-    async function renderRecommendations() {
-      root.innerHTML = '<h2>Recommendations</h2>';
-      try {
-        const data = await fetchJson('/api/miniapp/user/recommendations?type=movies&page=1&limit=10');
-        if (!data.items.length) {
-          root.innerHTML += '<p>No recommendations available.</p>';
-          return;
-        }
-        data.items.forEach((item) => root.appendChild(renderItemCard(item.movie || item.show || item, item.movie ? 'movie' : 'show')));
-      } catch (error) {
-        root.innerHTML += '<p>Unable to fetch recommendations.</p>';
+        root.innerHTML = '<div class="empty">Unable to load history</div>';
       }
     }
 
     async function renderProfile() {
-      root.innerHTML = '<h2>Profile</h2>';
+      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Profile</h2><div class="status">Loading...</div>';
       try {
         const data = await fetchJson('/api/miniapp/user/profile');
         const profile = data.profile || {};
-        const card = document.createElement('article');
-        card.className = 'card';
         const watchlistCount = ((profile.stats?.watchlist?.movies ?? 0) + (profile.stats?.watchlist?.shows ?? 0)) || 0;
         const collectionCount = ((profile.stats?.collection?.movies ?? 0) + (profile.stats?.collection?.shows ?? 0)) || 0;
-        card.innerHTML = '<h2>' + (profile.username || 'Unknown user') + '</h2>' +
-          '<p class="small">Trakt ID: ' + (profile.userId || 'Unknown') + '</p>' +
-          '<p>Movies watched: ' + (profile.stats?.movies?.watched ?? 0) + '</p>' +
-          '<p>Episodes watched: ' + (profile.stats?.episodes?.watched ?? 0) + '</p>' +
-          '<p>Ratings: ' + (profile.stats?.ratings?.total ?? 0) + '</p>' +
-          '<p>Watchlist: ' + watchlistCount + '</p>' +
-          '<p>Collection: ' + collectionCount + '</p>';
-        root.appendChild(card);
+        root.innerHTML = '<div class="card"><h2>' + (profile.username || 'Unknown user') + '</h2><p class="meta">Trakt ID: ' + (profile.userId || 'Unknown') + '</p><div class="profile-stats"><div class="stat"><div class="stat-value">' + (profile.stats?.movies?.watched ?? 0) + '</div><div class="stat-label">Movies watched</div></div><div class="stat"><div class="stat-value">' + (profile.stats?.episodes?.watched ?? 0) + '</div><div class="stat-label">Episodes watched</div></div><div class="stat"><div class="stat-value">' + watchlistCount + '</div><div class="stat-label">Watchlist</div></div><div class="stat"><div class="stat-value">' + (profile.stats?.ratings?.total ?? 0) + '</div><div class="stat-label">Ratings</div></div></div></div>';
       } catch (error) {
-        root.innerHTML += '<p>Unable to load profile. Ensure your Trakt account is connected.</p>';
+        root.innerHTML = '<div class="empty">Unable to load profile</div>';
       }
     }
 
     async function showDetails(type, id) {
-      state.screen = 'details';
-      renderNav();
-      root.innerHTML = '<h2>Loading details...</h2>';
+      root.innerHTML = '<div class="status">Loading...</div>';
       try {
         const data = await fetchJson('/api/miniapp/public/item/' + type + '/' + id);
         const item = data.item;
-        root.innerHTML = '<article class="card"><h2>' + (item.title || item.name || 'Unknown') + '</h2><p class="small">' + type.toUpperCase() + ' • ' + (item.year || item.first_aired?.slice(0,4) || '') + '</p><p>' + (item.overview || 'No description available.') + '</p><div class="row"><button class="link-button" onclick="window.location.reload()">Refresh</button></div></article>';
+        root.innerHTML = '<div class="card"><h2>' + (item.title || item.name || 'Unknown') + '</h2><p class="meta">' + type.toUpperCase() + ' • ' + (item.year || item.first_aired?.slice(0,4) || '') + '</p><p>' + (item.overview || 'No description available.') + '</p><div class="actions"><button class="btn" onclick="navigate(\\\"home\\\")\">Back</button></div></div>';
       } catch (error) {
-        root.innerHTML += '<p>Unable to load item details.</p>';
+        root.innerHTML = '<div class="empty">Unable to load details</div>';
       }
     }
 
