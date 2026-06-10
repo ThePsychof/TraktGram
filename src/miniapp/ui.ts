@@ -90,6 +90,12 @@ export function renderMiniAppPage(deepLink?: string) {
       setStatus('Loading...');
       try {
         const url = new URL(path, location.origin);
+        const isUserEndpoint = url.pathname.includes('/api/miniapp/user/');
+        
+        if (isUserEndpoint && !state.telegramId) {
+          throw new Error('telegramId is required in header x-telegram-user-id or query.');
+        }
+        
         const options = {
           headers: {}
         };
@@ -328,6 +334,10 @@ export function renderMiniAppPage(deepLink?: string) {
 
     function initialize() {
       state.telegramId = parseTelegramId();
+      if (!state.telegramId) {
+        setStatus('Error: Unable to identify user. Please access this page from Telegram or provide telegramId in query string.', true);
+        return;
+      }
       renderNav();
       if (state.deepLink) {
         const [type, id] = state.deepLink.split('_');
