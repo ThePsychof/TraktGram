@@ -1,15 +1,31 @@
 import type { Bot } from 'grammy';
+import { InlineKeyboard } from 'grammy';
 import type { OAuthService } from '../services/oauth';
 import type { TraktService } from '../services/trakt';
-import { buildMainMenu } from '../ui/menus';
 import { renderDetails } from '../ui/screens/details';
 
-// Register `/start` command and present main menu or deep-linked item.
-export function registerStart(bot: Bot, traktService: TraktService, oauthService?: OAuthService) {
+// Register `/start` command and present Mini App entrypoint.
+export function registerStart(
+  bot: Bot,
+  traktService: TraktService,
+  oauthService?: OAuthService,
+  miniAppUrl?: string
+) {
   bot.command('start', async (ctx) => {
     const text = ctx.message?.text?.trim() ?? '';
     const parts = text.split(' ').filter(Boolean);
     const payload = parts[1];
+
+    if (payload && miniAppUrl) {
+      const encodedPayload = encodeURIComponent(payload);
+      const url = `${miniAppUrl}?deepLink=${encodedPayload}`;
+      const keyboard = new InlineKeyboard().webApp('Open in TraktGram Mini App', url);
+      await ctx.reply(
+        'Open this item in the TraktGram Mini App for the best Trakt experience.',
+        { reply_markup: keyboard }
+      );
+      return;
+    }
 
     if (payload) {
       const [type, idPart] = payload.split('_');
@@ -19,13 +35,25 @@ export function registerStart(bot: Bot, traktService: TraktService, oauthService
           await renderDetails(ctx, traktService, oauthService as any, type, id);
           return;
         } catch (err) {
-          // If rendering fails, fall back to main menu
           console.error('Failed to render deep-linked item', err);
         }
       }
     }
 
-    const isAuthenticated = !!(ctx.from && oauthService && (await oauthService.getAuthenticatedUser(ctx.from.id)));
-    await ctx.reply('🎬 TraktGram', { reply_markup: buildMainMenu(!!isAuthenticated) });
+    const welcomeText = [
+      '🎬 TraktGram',
+      '',
+      'Open the Mini App for your primary Trakt experience: Continue Watching, Calendar, Watchlist, History, Recommendations, and Profile.',
+      '',
+      'Use inline search anywhere by typing @TraktGram_Bot followed by a movie or show title.',
+    ].join('\n');
+
+    if (miniAppUrl) {
+      const keyboard = new InlineKeyboard().webApp('Open TraktGram Mini App', miniAppUrl);
+      await ctx.reply(welcomeText, { reply_markup: keyboard });
+      return;
+    }
+
+    await ctx.reply(welcomeText);
   });
 }

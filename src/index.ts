@@ -3,6 +3,8 @@ import type { Update } from '@grammyjs/types';
 import { TraktService } from './services/trakt';
 import { OAuthService } from './services/oauth';
 import { StorageService } from './services/storage';
+import { handleMiniAppApiRequest } from './miniapp/api';
+import { renderMiniAppPage } from './miniapp/ui';
 import { getSuccessPageHTML, getErrorPageHTML } from './utils/oauth-pages';
 import logger from './utils/logger';
 
@@ -13,12 +15,14 @@ interface Env {
   TRAKT_API_KEY?: string; // fallback for legacy deployments
   WEBHOOK_SECRET?: string;
   OAUTH_REDIRECT_URI?: string; // Optional, defaults to https://<worker-domain>/auth/callback
+  MINI_APP_URL?: string; // Optional Mini App entrypoint URL
   STORE?: KVNamespace; // Cloudflare KV namespace for storing OAuth data
 }
 
 let bot: (ReturnType<typeof createBot> extends Promise<infer B> ? B : never) | null = null;
 let botToken: string | undefined;
 let oauthService: OAuthService | null = null;
+let traktServiceInstance: TraktService | null = null;
 
 /**
  * Parse the request URL to get the hostname
@@ -26,6 +30,47 @@ let oauthService: OAuthService | null = null;
 function getHostname(request: Request): string {
   const url = new URL(request.url);
   return url.hostname;
+}
+
+function getTraktApiKey(env: Env): string | null {
+  return env.TRAKT_CLIENT_ID ?? env.TRAKT_API_KEY ?? null;
+}
+
+function createTraktService(env: Env): TraktService {
+  if (!traktServiceInstance) {
+    const traktApiKey = getTraktApiKey(env);
+    if (!traktApiKey) {
+      throw new Error('Trakt API key not configured');
+    }
+    traktServiceInstance = new TraktService(traktApiKey);
+  }
+  return traktServiceInstance;
+}
+
+function createOAuthService(env: Env, request: Request): OAuthService | null {
+  if (oauthService) {
+    return oauthService;
+  }
+
+  if (!env.TRAKT_CLIENT_ID || !env.TRAKT_CLIENT_SECRET || !env.STORE) {
+    return null;
+  }
+
+  const storageService = new StorageService(env.STORE);
+  const redirectUri = env.OAUTH_REDIRECT_URI || `https://${getHostname(request)}/auth/callback`;
+
+  oauthService = new OAuthService(
+    env.TRAKT_CLIENT_ID,
+    env.TRAKT_CLIENT_SECRET,
+    redirectUri,
+    storageService
+  );
+
+  return oauthService;
+}
+
+function getMiniAppUrl(env: Env, request: Request): string {
+  return env.MINI_APP_URL ?? `https://${getHostname(request)}/miniapp`;
 }
 
 /**
@@ -113,6 +158,26 @@ export default {
       return handleOAuthCallback(request, env);
     }
 
+    if (url.pathname === '/miniapp' && request.method === 'GET') {
+      const deepLink = url.searchParams.get('deepLink') ?? undefined;
+      const html = renderMiniAppPage(deepLink);
+      return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    }
+
+    let traktService: TraktService;
+    try {
+      traktService = createTraktService(env);
+    } catch (error) {
+      logger.error('Trakt API key not configured', error);
+      return new Response('Internal Server Error', { status: 500 });
+    }
+
+    const localOAuthService = createOAuthService(env, request);
+    const miniAppResponse = await handleMiniAppApiRequest(request, url, traktService, localOAuthService ?? undefined);
+    if (miniAppResponse) {
+      return miniAppResponse;
+    }
+
     // Handle Telegram webhook (existing functionality)
     if (request.method !== 'POST') {
       return new Response('Method Not Allowed', { status: 405 });
@@ -144,34 +209,12 @@ export default {
         using: usedKeyName,
       });
 
-      const traktApiKey = env.TRAKT_CLIENT_ID ?? env.TRAKT_API_KEY;
-      if (!traktApiKey) {
-        logger.error('Trakt API key not configured. Set TRAKT_CLIENT_ID in Cloudflare secrets.');
-        return new Response('Internal Server Error', { status: 500 });
-      }
-
-      const traktService = new TraktService(traktApiKey);
+      const traktServiceInstance = traktService;
 
       // Initialize OAuth service if credentials are available
-      if (!oauthService && env.TRAKT_CLIENT_ID && env.TRAKT_CLIENT_SECRET && env.STORE) {
-        try {
-          const storageService = new StorageService(env.STORE);
-          const redirectUri = env.OAUTH_REDIRECT_URI || `https://${getHostname(request)}/auth/callback`;
+      const botOAuthService = localOAuthService ?? (env.TRAKT_CLIENT_ID && env.TRAKT_CLIENT_SECRET && env.STORE ? createOAuthService(env, request) : null);
 
-          oauthService = new OAuthService(
-            env.TRAKT_CLIENT_ID,
-            env.TRAKT_CLIENT_SECRET,
-            redirectUri,
-            storageService
-          );
-
-          logger.info('OAuth service initialized');
-        } catch (error) {
-          logger.warn('Failed to initialize OAuth service', error);
-        }
-      }
-
-      bot = await createBot(env.BOT_TOKEN, traktService, oauthService || undefined);
+      bot = await createBot(env.BOT_TOKEN, traktServiceInstance, botOAuthService || undefined, getMiniAppUrl(env, request));
       botToken = env.BOT_TOKEN;
       await bot.init();
     }

@@ -10,10 +10,10 @@ import type { TraktService } from './services/trakt';
 import type { OAuthService } from './services/oauth';
 import logger from './utils/logger';
 
-export async function createBot(token: string, traktService: TraktService, oauthService?: OAuthService) {
+export async function createBot(token: string, traktService: TraktService, oauthService?: OAuthService, miniAppUrl?: string) {
   const bot = new Bot(token);
 
-  registerStart(bot, traktService, oauthService);
+  registerStart(bot, traktService, oauthService, miniAppUrl);
   registerPing(bot);
   registerHelp(bot);
   registerTrending(bot, traktService);
@@ -28,7 +28,7 @@ export async function createBot(token: string, traktService: TraktService, oauth
   // Register new callback handlers for navigation and UI
   try {
     const { registerCallbackHandlers } = await import('./handlers/callbacks');
-    registerCallbackHandlers(bot, traktService, oauthService);
+    registerCallbackHandlers(bot, traktService, oauthService, miniAppUrl);
   } catch (err) {
     logger.error('Failed to register callback handlers', err);
   }

@@ -1,37 +1,35 @@
-import type { Bot } from 'grammy';
+import type { Bot, Context } from 'grammy';
 import type { TraktService } from '../services/trakt';
 import type { OAuthService } from '../services/oauth';
-import { renderHome } from '../ui/screens/home';
-import { renderContinueWatching } from '../ui/screens/continueWatching';
-import { renderWatchlist } from '../ui/screens/watchlist';
 import { renderDetails } from '../ui/screens/details';
-import { renderHistory } from '../ui/screens/history';
-import { renderProfile } from '../ui/screens/account';
-import { renderRecommendations } from '../ui/screens/recommendations';
-import { renderCalendar } from '../ui/screens/calendar';
-import { renderCollection } from '../ui/screens/collection';
 import { buildManagementKeyboard, buildRatingKeyboard } from '../ui/menus';
 import logger from '../utils/logger';
 import { decodeCallback, encodeCallback } from '../utils/callbackData';
 
-export function registerCallbackHandlers(bot: Bot, traktService: TraktService, oauthService?: OAuthService) {
+export function registerCallbackHandlers(bot: Bot, traktService: TraktService, oauthService?: OAuthService, miniAppUrl?: string) {
+  const promptMiniApp = async (ctx: Context, note: string) => {
+    const message = miniAppUrl
+      ? `${note}\n\nOpen the TraktGram Mini App here:\n${miniAppUrl}`
+      : `${note}\n\nUse /start to open the TraktGram Mini App.`;
+    try {
+      await ctx.reply(message);
+    } catch {
+      await ctx.answerCallbackQuery({ text: miniAppUrl ? 'Open the Mini App from the chat.' : 'Use /start to open the Mini App.', show_alert: true });
+    }
+  };
+
   bot.callbackQuery('a:home', async (ctx) => {
     try {
-      await renderHome(ctx, oauthService);
+      await promptMiniApp(ctx, 'Open the TraktGram Mini App for the full experience.');
       await ctx.answerCallbackQuery();
     } catch (err) {
       logger.error('home callback error', err);
     }
   });
 
-  // Legacy direct mapping for continue/watchlist actions
   bot.callbackQuery('a:continue', async (ctx) => {
     try {
-      if (!oauthService) {
-        await ctx.answerCallbackQuery({ text: 'OAuth not configured', show_alert: true });
-        return;
-      }
-      await renderContinueWatching(ctx, traktService, oauthService);
+      await promptMiniApp(ctx, 'Continue Watching is available in the Mini App.');
       await ctx.answerCallbackQuery();
     } catch (err) {
       logger.error('continue callback error', err);
@@ -40,11 +38,7 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
 
   bot.callbackQuery('a:watchlist', async (ctx) => {
     try {
-      if (!oauthService) {
-        await ctx.answerCallbackQuery({ text: 'OAuth not configured', show_alert: true });
-        return;
-      }
-      await renderWatchlist(ctx, traktService, oauthService);
+      await promptMiniApp(ctx, 'Watchlist access is available in the Mini App.');
       await ctx.answerCallbackQuery();
     } catch (err) {
       logger.error('watchlist callback error', err);
@@ -53,11 +47,7 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
 
   bot.callbackQuery('a:calendar', async (ctx) => {
     try {
-      if (!oauthService) {
-        await ctx.answerCallbackQuery({ text: 'OAuth not configured', show_alert: true });
-        return;
-      }
-      await renderCalendar(ctx, traktService, oauthService);
+      await promptMiniApp(ctx, 'Calendar and upcoming episodes are available in the Mini App.');
       await ctx.answerCallbackQuery();
     } catch (err) {
       logger.error('calendar callback error', err);
@@ -66,16 +56,13 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
 
   bot.callbackQuery('a:account', async (ctx) => {
     try {
-      if (!oauthService) {
-        await ctx.answerCallbackQuery({ text: 'OAuth not configured', show_alert: true });
-        return;
-      }
-      await renderProfile(ctx, oauthService, traktService);
+      await promptMiniApp(ctx, 'Your Trakt profile is best viewed in the Mini App.');
       await ctx.answerCallbackQuery();
     } catch (err) {
       logger.error('account callback error', err);
     }
   });
+
 
   bot.on('callback_query:data', async (ctx) => {
     try {
@@ -85,34 +72,31 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
       const params = parsed.params;
 
       if (action === 'continue') {
-        const page = Number(params.page || '1');
-        await renderContinueWatching(ctx, traktService, oauthService as any, page);
+        await promptMiniApp(ctx, 'Continue Watching is available in the Mini App.');
         await ctx.answerCallbackQuery();
         return;
       }
 
       if (action === 'watchlist') {
-        const page = Number(params.page || '1');
-        await renderWatchlist(ctx, traktService, oauthService as any, page);
+        await promptMiniApp(ctx, 'Watchlist access is available in the Mini App.');
         await ctx.answerCallbackQuery();
         return;
       }
 
       if (action === 'collection') {
-        const page = Number(params.page || '1');
-        await renderCollection(ctx, traktService, oauthService as any, page);
+        await promptMiniApp(ctx, 'Your collection is available in the Mini App.');
         await ctx.answerCallbackQuery();
         return;
       }
 
       if (action === 'calendar') {
-        await renderCalendar(ctx, traktService, oauthService as any);
+        await promptMiniApp(ctx, 'Calendar and upcoming episodes are available in the Mini App.');
         await ctx.answerCallbackQuery();
         return;
       }
 
       if (action === 'home') {
-          await renderHome(ctx, oauthService as any);
+        await promptMiniApp(ctx, 'Open the TraktGram Mini App for the full experience.');
         await ctx.answerCallbackQuery();
         return;
       }
@@ -157,22 +141,19 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
       }
 
       if (action === 'history') {
-        const page = Number(params.page || '1');
-        await renderHistory(ctx, traktService, oauthService as any, page);
+        await promptMiniApp(ctx, 'History is available in the Mini App.');
         await ctx.answerCallbackQuery();
         return;
       }
 
       if (action === 'account') {
-        if (!oauthService) { await ctx.answerCallbackQuery({ text: 'OAuth not configured', show_alert: true }); return; }
-        await renderProfile(ctx, oauthService as any, traktService);
+        await promptMiniApp(ctx, 'Your Trakt profile is best viewed in the Mini App.');
         await ctx.answerCallbackQuery();
         return;
       }
 
       if (action === 'recommendations') {
-        const page = Number(params.page || '1');
-        await renderRecommendations(ctx, traktService, oauthService as any, page);
+        await promptMiniApp(ctx, 'Recommendations are available in the Mini App.');
         await ctx.answerCallbackQuery();
         return;
       }
@@ -193,12 +174,7 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
       }
 
       if (action === 'similar') {
-        const page = Number(params.page || '1');
-        if (!oauthService) {
-          await ctx.answerCallbackQuery({ text: 'Connect Trakt to view similar items', show_alert: true });
-          return;
-        }
-        await renderRecommendations(ctx, traktService, oauthService, page);
+        await promptMiniApp(ctx, 'Similar item recommendations are available in the Mini App.');
         await ctx.answerCallbackQuery();
         return;
       }
@@ -329,7 +305,14 @@ export function registerCallbackHandlers(bot: Bot, traktService: TraktService, o
 
       if (action === 'logout') {
         if (!oauthService || !ctx.from) { await ctx.answerCallbackQuery({ text: 'Not authenticated', show_alert: true }); return; }
-        try { await oauthService.logout(ctx.from.id); await ctx.answerCallbackQuery({ text: 'Logged out', show_alert: false }); await renderHome(ctx, oauthService); } catch (err) { logger.error('logout error', err); await ctx.answerCallbackQuery({ text: 'Logout failed', show_alert: true }); }
+        try {
+          await oauthService.logout(ctx.from.id);
+          await ctx.answerCallbackQuery({ text: 'Logged out', show_alert: false });
+          await ctx.reply('Logged out. Open the Mini App to continue.');
+        } catch (err) {
+          logger.error('logout error', err);
+          await ctx.answerCallbackQuery({ text: 'Logout failed', show_alert: true });
+        }
         return;
       }
 

@@ -8,21 +8,12 @@ export function buildMainMenu(isAuthenticated: boolean): InlineKeyboardMarkup {
 
   return {
     inline_keyboard: [
+      [{ text: '🚀 Open Mini App', callback_data: 'a:home' }],
       [
-        { text: '📺 Continue Watching', callback_data: 'a:continue' },
-        { text: '📅 Calendar', callback_data: 'a:calendar' },
         { text: '🔍 Search', callback_data: 'a:search' },
-      ],
-      [
-        { text: '📝 Watchlist', callback_data: 'a:watchlist' },
-        { text: '📜 History', callback_data: 'a:history' },
-        { text: '🎯 Recommendations', callback_data: 'a:recommendations' },
-      ],
-      [
-        authRow[0],
         { text: '🔥 Trending', callback_data: 'a:trending' },
-        { text: '🏠 Home', callback_data: 'a:home' },
       ],
+      [authRow[0]],
     ],
   } as InlineKeyboardMarkup;
 }
