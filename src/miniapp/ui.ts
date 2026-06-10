@@ -326,7 +326,29 @@ export function renderMiniAppPage(deepLink?: string) {
       try {
         const data = await fetchJson('/api/miniapp/public/item/' + type + '/' + id);
         const item = data.item;
-        root.innerHTML = '<div class="card"><h2>' + (item.title || item.name || 'Unknown') + '</h2><p class="meta">' + type.toUpperCase() + ' • ' + (item.year || item.first_aired?.slice(0,4) || '') + '</p><p>' + (item.overview || 'No description available.') + '</p><div class="actions"><button class="btn" onclick="navigate(\\\"home\\\")\">Back</button></div></div>';
+        root.innerHTML = '';
+        const card = document.createElement('div');
+        card.className = 'card';
+        const title = document.createElement('h2');
+        title.textContent = item.title || item.name || 'Unknown';
+        card.appendChild(title);
+        const meta = document.createElement('p');
+        meta.className = 'meta';
+        const year = item.year || item.first_aired?.slice(0, 4) || '';
+        meta.textContent = [type.toUpperCase(), year].filter(Boolean).join(' • ');
+        card.appendChild(meta);
+        const description = document.createElement('p');
+        description.textContent = item.overview || 'No description available.';
+        card.appendChild(description);
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+        const backButton = document.createElement('button');
+        backButton.className = 'btn';
+        backButton.textContent = 'Back';
+        backButton.addEventListener('click', () => navigate('home'));
+        actions.appendChild(backButton);
+        card.appendChild(actions);
+        root.appendChild(card);
       } catch (error) {
         root.innerHTML = '<div class="empty">Unable to load details</div>';
       }
