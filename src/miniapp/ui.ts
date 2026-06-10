@@ -334,10 +334,6 @@ export function renderMiniAppPage(deepLink?: string) {
 
     function initialize() {
       state.telegramId = parseTelegramId();
-      if (!state.telegramId) {
-        setStatus('Error: Unable to identify user. Please access this page from Telegram or provide telegramId in query string.', true);
-        return;
-      }
       renderNav();
       if (state.deepLink) {
         const [type, id] = state.deepLink.split('_');
