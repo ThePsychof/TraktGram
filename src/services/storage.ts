@@ -31,9 +31,7 @@ export class StorageService {
 
     try {
       const key = this.getOAuthKey(data.telegramId);
-      // Set with 30-day expiration
-      const expirationTtl = 30 * 24 * 60 * 60;
-      await this.kv.put(key, JSON.stringify(data), { expirationTtl });
+      await this.kv.put(key, JSON.stringify(data));
       logger.info('Stored OAuth data for user', { telegramId: data.telegramId });
     } catch (error) {
       logger.error('Failed to store OAuth data', error);
@@ -149,15 +147,5 @@ export class StorageService {
     }
 
     return true;
-  }
-}
-
-// Type definition for KV binding in Cloudflare Workers
-declare global {
-  interface KVNamespace {
-    get(key: string, type: 'json'): Promise<object | null>;
-    get(key: string, type?: 'text'): Promise<string | null>;
-    put(key: string, value: string | ReadableStream<Uint8Array> | ArrayBuffer, options?: any): Promise<void>;
-    delete(key: string): Promise<void>;
   }
 }

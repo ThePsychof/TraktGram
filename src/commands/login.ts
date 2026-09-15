@@ -23,7 +23,7 @@ export function registerLogin(bot: Bot, oauthService: OAuthService) {
       const authUrl = await oauthService.generateAuthorizationUrl(telegramId);
 
       // Create inline keyboard with login button
-      const keyboard = new InlineKeyboard().webApp('Login with Trakt', authUrl);
+      const keyboard = new InlineKeyboard().url('Login with Trakt', authUrl);
 
       await ctx.reply('🔐 Connect your Trakt account\n\nClick the button below to authorize TraktGram to access your Trakt data.', {
         reply_markup: keyboard,

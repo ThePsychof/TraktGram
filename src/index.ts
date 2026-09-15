@@ -1,5 +1,5 @@
 import { createBot } from './bot';
-import type { Update } from '@grammyjs/types';
+import type { Update } from 'grammy/types';
 import { TraktService } from './services/trakt';
 import { OAuthService } from './services/oauth';
 import { StorageService } from './services/storage';
@@ -12,24 +12,23 @@ interface Env {
   BOT_TOKEN: string;
   TRAKT_CLIENT_ID?: string;
   TRAKT_CLIENT_SECRET?: string;
-  TRAKT_API_KEY?: string; // fallback for legacy deployments
+  TRAKT_API_KEY?: string;
   WEBHOOK_SECRET?: string;
-  OAUTH_REDIRECT_URI?: string; // Optional, defaults to https://<worker-domain>/auth/callback
-  MINI_APP_URL?: string; // Optional Mini App entrypoint URL
-  STORE?: KVNamespace; // Cloudflare KV namespace for storing OAuth data
+  OAUTH_REDIRECT_URI?: string;
+  MINI_APP_URL?: string;
+  ADMIN_SECRET?: string;
+  STORE?: KVNamespace;
 }
 
-let bot: (ReturnType<typeof createBot> extends Promise<infer B> ? B : never) | null = null;
-let botToken: string | undefined;
-let oauthService: OAuthService | null = null;
-let traktServiceInstance: TraktService | null = null;
+type BotInstance = Awaited<ReturnType<typeof createBot>>;
 
-/**
- * Parse the request URL to get the hostname
- */
-function getHostname(request: Request): string {
+let bot: BotInstance | null = null;
+let botToken: string | undefined;
+
+function baseUrl(request: Request): string {
   const url = new URL(request.url);
-  return url.hostname;
+  const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  return `${isLocal ? 'http' : 'https'}://${url.host}`;
 }
 
 function getTraktApiKey(env: Env): string | null {
@@ -37,47 +36,31 @@ function getTraktApiKey(env: Env): string | null {
 }
 
 function createTraktService(env: Env): TraktService | null {
-  if (!traktServiceInstance) {
-    const traktApiKey = getTraktApiKey(env);
-    if (!traktApiKey) {
-      logger.warn('Trakt API key not configured; bot will run with limited functionality');
-      return null;
-    }
-    traktServiceInstance = new TraktService(traktApiKey);
+  const key = getTraktApiKey(env);
+  if (!key) {
+    logger.warn('Trakt API key not configured; bot will run with limited functionality');
+    return null;
   }
-  return traktServiceInstance;
+  return new TraktService(key);
 }
 
 function createOAuthService(env: Env, request: Request): OAuthService | null {
-  if (oauthService) {
-    return oauthService;
-  }
-
   if (!env.TRAKT_CLIENT_ID || !env.TRAKT_CLIENT_SECRET || !env.STORE) {
     return null;
   }
-
-  const storageService = new StorageService(env.STORE);
-  const redirectUri = env.OAUTH_REDIRECT_URI || `https://${getHostname(request)}/auth/callback`;
-
-  oauthService = new OAuthService(
-    env.TRAKT_CLIENT_ID,
-    env.TRAKT_CLIENT_SECRET,
-    redirectUri,
-    storageService
-  );
-
-  return oauthService;
+  const storage = new StorageService(env.STORE);
+  const redirectUri = env.OAUTH_REDIRECT_URI || `${baseUrl(request)}/auth/callback`;
+  return new OAuthService(env.TRAKT_CLIENT_ID, env.TRAKT_CLIENT_SECRET, redirectUri, storage);
 }
 
 function getMiniAppUrl(env: Env, request: Request): string {
-  return env.MINI_APP_URL ?? `https://${getHostname(request)}/miniapp`;
+  return env.MINI_APP_URL ?? `${baseUrl(request)}/miniapp`;
 }
 
-/**
- * Route handler for OAuth callback
- */
 async function handleOAuthCallback(request: Request, env: Env): Promise<Response> {
+  const html = (body: string, status: number) =>
+    new Response(body, { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+
   try {
     const url = new URL(request.url);
     const code = url.searchParams.get('code');
@@ -87,99 +70,137 @@ async function handleOAuthCallback(request: Request, env: Env): Promise<Response
 
     logger.info('OAuth callback received', { hasCode: !!code, hasState: !!state, error });
 
-    // Handle OAuth error response
     if (error) {
-      const errorMsg = `${error}: ${errorDescription || 'Unknown error'}`;
-      logger.warn('OAuth error from Trakt', { error, errorDescription });
-      return new Response(getErrorPageHTML(errorMsg), {
-        status: 400,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      });
+      return html(getErrorPageHTML(`${error}: ${errorDescription || 'Unknown error'}`), 400);
     }
-
-    // Validate required parameters
     if (!code || !state) {
-      logger.warn('OAuth callback missing required parameters');
-      return new Response(getErrorPageHTML('Missing authorization code or state parameter'), {
-        status: 400,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      });
+      return html(getErrorPageHTML('Missing authorization code or state parameter'), 400);
     }
 
-    // Initialize OAuth service if not already done
-    if (!oauthService) {
-      if (!env.STORE) {
-        logger.error('KV namespace not configured');
-        return new Response(getErrorPageHTML('Storage not configured on server'), {
-          status: 500,
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        });
-      }
-
-      const storageService = new StorageService(env.STORE);
-      const redirectUri = env.OAUTH_REDIRECT_URI || `https://${getHostname(request)}/auth/callback`;
-
-      oauthService = new OAuthService(
-        env.TRAKT_CLIENT_ID,
-        env.TRAKT_CLIENT_SECRET,
-        redirectUri,
-        storageService
-      );
+    const oauth = createOAuthService(env, request);
+    if (!oauth) {
+      logger.error('OAuth not configured');
+      return html(getErrorPageHTML('OAuth is not configured on this server'), 500);
     }
 
-    // Process the callback
-    const oauthData = await oauthService.handleCallback({ code, state });
-
+    const oauthData = await oauth.handleCallback({ code, state });
     logger.info('OAuth callback processed successfully', {
       telegramId: oauthData.telegramId,
       username: oauthData.username,
     });
-
-    // Return success page
-    return new Response(getSuccessPageHTML(oauthData.username || 'User'), {
-      status: 200,
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    });
+    return html(getSuccessPageHTML(oauthData.username || 'User'), 200);
   } catch (error) {
     logger.error('Error processing OAuth callback', error);
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
-    return new Response(getErrorPageHTML(errorMsg), {
-      status: 500,
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    });
+    return html(getErrorPageHTML('An error occurred during login. Please try again.'), 500);
   }
+}
+
+async function ensureBot(env: Env, request: Request): Promise<BotInstance | null> {
+  if (!env.BOT_TOKEN) return null;
+  if (bot && botToken === env.BOT_TOKEN) return bot;
+
+  const traktService = createTraktService(env);
+  const oauthService = createOAuthService(env, request);
+  const miniAppUrl = getMiniAppUrl(env, request);
+
+  const newBot = await createBot(env.BOT_TOKEN, traktService as TraktService, oauthService ?? undefined, miniAppUrl);
+  await newBot.init();
+  bot = newBot;
+  botToken = env.BOT_TOKEN;
+  logger.info('Bot initialized');
+  return bot;
 }
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    // Handle OAuth callback route
+    // ---- Health check ----
+    if (url.pathname === '/' || url.pathname === '/health') {
+      return new Response('ok');
+    }
+
+    // ---- Admin: set Telegram webhook ----
+    if (url.pathname === '/admin/set-webhook' && request.method === 'POST') {
+      if (!env.ADMIN_SECRET || request.headers.get('x-admin-secret') !== env.ADMIN_SECRET) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      if (!env.BOT_TOKEN) {
+        return new Response('BOT_TOKEN not set', { status: 500 });
+      }
+      const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/setWebhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: `${baseUrl(request)}/webhook`,
+          secret_token: env.WEBHOOK_SECRET,
+          allowed_updates: ['message', 'callback_query', 'inline_query'],
+        }),
+      });
+      return new Response(await res.text(), {
+        status: res.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ---- Admin: webhook info ----
+    if (url.pathname === '/admin/webhook-info' && request.method === 'GET') {
+      if (!env.ADMIN_SECRET || request.headers.get('x-admin-secret') !== env.ADMIN_SECRET) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      if (!env.BOT_TOKEN) {
+        return new Response('BOT_TOKEN not set', { status: 500 });
+      }
+      const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getWebhookInfo`);
+      return new Response(await res.text(), {
+        status: res.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ---- Admin: delete webhook ----
+    if (url.pathname === '/admin/delete-webhook' && request.method === 'POST') {
+      if (!env.ADMIN_SECRET || request.headers.get('x-admin-secret') !== env.ADMIN_SECRET) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      if (!env.BOT_TOKEN) {
+        return new Response('BOT_TOKEN not set', { status: 500 });
+      }
+      const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/deleteWebhook`);
+      return new Response(await res.text(), {
+        status: res.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ---- OAuth callback ----
     if (url.pathname === '/auth/callback' && request.method === 'GET') {
       return handleOAuthCallback(request, env);
     }
 
+    // ---- Mini App HTML ----
     if (url.pathname === '/miniapp' && request.method === 'GET') {
       const deepLink = url.searchParams.get('deepLink') ?? undefined;
       const html = renderMiniAppPage(deepLink);
       return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
-    const traktService = createTraktService(env);
-    const localOAuthService = createOAuthService(env, request);
-    const miniAppResponse = await handleMiniAppApiRequest(request, url, traktService, localOAuthService ?? undefined);
-    if (miniAppResponse) {
-      return miniAppResponse;
+    // ---- Mini App API ----
+    if (url.pathname.startsWith('/api/')) {
+      const traktService = createTraktService(env);
+      const oauthService = createOAuthService(env, request);
+      const apiResponse = await handleMiniAppApiRequest(
+        request,
+        url,
+        traktService as TraktService,
+        oauthService ?? undefined,
+      );
+      return apiResponse ?? new Response('Not Found', { status: 404 });
     }
 
-    // Handle Telegram webhook (existing functionality)
-    if (request.method !== 'POST') {
-      return new Response('Method Not Allowed', { status: 405 });
-    }
-
-    if (!env.BOT_TOKEN) {
-      logger.error('BOT_TOKEN not set in environment');
-      return new Response('Internal Server Error', { status: 500 });
+    // ---- Telegram webhook ----
+    if (url.pathname !== '/webhook' || request.method !== 'POST') {
+      return new Response('Not Found', { status: 404 });
     }
 
     if (env.WEBHOOK_SECRET) {
@@ -190,33 +211,19 @@ export default {
       }
     }
 
-    if (!bot || botToken !== env.BOT_TOKEN) {
-      const hasClientId = Boolean(env.TRAKT_CLIENT_ID);
-      const hasClientSecret = Boolean(env.TRAKT_CLIENT_SECRET);
-      const hasLegacyKey = Boolean(env.TRAKT_API_KEY);
-      const usedKeyName = hasClientId ? 'TRAKT_CLIENT_ID' : hasLegacyKey ? 'TRAKT_API_KEY' : 'none';
-
-      logger.info('Trakt env variables:', {
-        TRAKT_CLIENT_ID: hasClientId,
-        TRAKT_CLIENT_SECRET: hasClientSecret,
-        TRAKT_API_KEY: hasLegacyKey,
-        using: usedKeyName,
-      });
-
-      const traktServiceInstance = traktService;
-
-      // Initialize OAuth service if credentials are available
-      const botOAuthService = localOAuthService ?? (env.TRAKT_CLIENT_ID && env.TRAKT_CLIENT_SECRET && env.STORE ? createOAuthService(env, request) : null);
-
-      bot = await createBot(env.BOT_TOKEN, traktServiceInstance, botOAuthService || undefined, getMiniAppUrl(env, request));
-      botToken = env.BOT_TOKEN;
+    const activeBot = await ensureBot(env, request);
+    if (!activeBot) {
+      logger.error('Bot not configured (missing BOT_TOKEN)');
+      return new Response('Bot not configured', { status: 500 });
     }
 
-    const update = await request.json() as Update;
-    ctx.waitUntil(bot!.handleUpdate(update).catch((err: unknown) => {
-      logger.error('Error handling update:', err);
-    }));
+    const update = (await request.json()) as Update;
+    ctx.waitUntil(
+      activeBot.handleUpdate(update).catch((err: unknown) => {
+        logger.error('Error handling update:', err);
+      }),
+    );
 
     return new Response('OK', { status: 200 });
-  }
+  },
 } as ExportedHandler<Env>;

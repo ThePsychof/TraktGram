@@ -17,6 +17,7 @@
     "wrangler": "^4.99.0"
   },
   "dependencies": {
+    "@grammyjs/types": "^3.20.0",
     "grammy": "^1.43.0"
   },
   "engines": {

@@ -6,6 +6,7 @@ node_modules/
 
 # build output
 dist/
+.dev.vars
 build/
 
 # local env files
@@ -27,11 +28,5 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 .env.example
-DEPLOYMENT_GUIDE.md
-OAUTH_DEPLOYMENT.md
-CHANGELOG_OAUTH.md
-OAUTH_IMPLEMENTATION.md
-OAUTH_QUICK_REFERENCE.md
-OAUTH_SUMMARY.md
 README.md
-REFACTOR.md
+.dev.vars.example

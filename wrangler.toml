@@ -1,33 +1,20 @@
-name = "traktgram"
+name = "traktgrambot"
 main = "src/index.ts"
 compatibility_date = "2024-12-16"
 compatibility_flags = ["nodejs_compat"]
+account_id = "58311076771fec821305824887d5da1f"
 
 # KV namespace bindings for OAuth state and user session storage
 [[kv_namespaces]]
 binding = "STORE"
-id = "9be5924a900a44aa9ad8e94fd8a5d0b5"
-preview_id = "9be5924a900a44aa9ad8e94fd8a5d0b5"
+id = "adb1f4fb9dcf41ff89eac2d8a73881ec"
+preview_id = "5d5603f7d4144f73811201ae8e7dd525"
 
-# Environment configuration
+# Production environment
 [env.production]
-name = "traktgram-prod"
+name = "traktgrambot"
+account_id = "58311076771fec821305824887d5da1f"
 
 [[env.production.kv_namespaces]]
 binding = "STORE"
-id = "9be5924a900a44aa9ad8e94fd8a5d0b5"
-
-[env.staging]
-name = "traktgram-staging"
-
-[[env.staging.kv_namespaces]]
-binding = "STORE"
-id = "9be5924a900a44aa9ad8e94fd8a5d0b5"
-
-# Environment variables are set via wrangler secret set command
-# These include:
-#   BOT_TOKEN - Telegram bot token
-#   TRAKT_CLIENT_ID - Trakt OAuth client ID
-#   TRAKT_CLIENT_SECRET - Trakt OAuth client secret
-#   WEBHOOK_SECRET - Optional: Telegram webhook secret token
-#   OAUTH_REDIRECT_URI - Optional: OAuth redirect URI (defaults to https://<worker-domain>/auth/callback)
+id = "adb1f4fb9dcf41ff89eac2d8a73881ec"
