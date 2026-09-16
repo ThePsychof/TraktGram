@@ -3,10 +3,10 @@ import type { Update } from 'grammy/types';
 import { TraktService } from './services/trakt';
 import { OAuthService } from './services/oauth';
 import { StorageService } from './services/storage';
-import { handleMiniAppApiRequest } from './miniapp/api';
-import { renderMiniAppPage } from './miniapp/ui';
-import { getSuccessPageHTML, getErrorPageHTML } from './utils/oauth-pages';
 import logger from './utils/logger';
+import { renderAuthStartPage } from './miniapp/auth-page';
+import { renderMiniAppPage } from './miniapp/ui';
+import { handleMiniAppApiRequest } from './miniapp/api';
 
 interface Env {
   BOT_TOKEN: string;
@@ -15,10 +15,11 @@ interface Env {
   TRAKT_API_KEY?: string;
   WEBHOOK_SECRET?: string;
   OAUTH_REDIRECT_URI?: string;
-  MINI_APP_URL?: string;
   ADMIN_SECRET?: string;
   STORE?: KVNamespace;
 }
+
+const BOT_USERNAME = 'TraktGram_bot';
 
 type BotInstance = Awaited<ReturnType<typeof createBot>>;
 
@@ -53,34 +54,28 @@ function createOAuthService(env: Env, request: Request): OAuthService | null {
   return new OAuthService(env.TRAKT_CLIENT_ID, env.TRAKT_CLIENT_SECRET, redirectUri, storage);
 }
 
-function getMiniAppUrl(env: Env, request: Request): string {
-  return env.MINI_APP_URL ?? `${baseUrl(request)}/miniapp`;
-}
-
 async function handleOAuthCallback(request: Request, env: Env): Promise<Response> {
-  const html = (body: string, status: number) =>
-    new Response(body, { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  const redirectTo = (payload: string) =>
+    new Response(null, {
+      status: 302,
+      headers: { Location: `https://t.me/${BOT_USERNAME}?start=${payload}` },
+    });
 
   try {
     const url = new URL(request.url);
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
     const error = url.searchParams.get('error');
-    const errorDescription = url.searchParams.get('error_description');
 
     logger.info('OAuth callback received', { hasCode: !!code, hasState: !!state, error });
 
-    if (error) {
-      return html(getErrorPageHTML(`${error}: ${errorDescription || 'Unknown error'}`), 400);
-    }
-    if (!code || !state) {
-      return html(getErrorPageHTML('Missing authorization code or state parameter'), 400);
-    }
+    if (error) return redirectTo('connect_failed');
+    if (!code || !state) return redirectTo('connect_failed');
 
     const oauth = createOAuthService(env, request);
     if (!oauth) {
       logger.error('OAuth not configured');
-      return html(getErrorPageHTML('OAuth is not configured on this server'), 500);
+      return redirectTo('connect_failed');
     }
 
     const oauthData = await oauth.handleCallback({ code, state });
@@ -88,10 +83,10 @@ async function handleOAuthCallback(request: Request, env: Env): Promise<Response
       telegramId: oauthData.telegramId,
       username: oauthData.username,
     });
-    return html(getSuccessPageHTML(oauthData.username || 'User'), 200);
+    return redirectTo('connected');
   } catch (error) {
     logger.error('Error processing OAuth callback', error);
-    return html(getErrorPageHTML('An error occurred during login. Please try again.'), 500);
+    return redirectTo('connect_failed');
   }
 }
 
@@ -101,9 +96,12 @@ async function ensureBot(env: Env, request: Request): Promise<BotInstance | null
 
   const traktService = createTraktService(env);
   const oauthService = createOAuthService(env, request);
-  const miniAppUrl = getMiniAppUrl(env, request);
 
-  const newBot = await createBot(env.BOT_TOKEN, traktService as TraktService, oauthService ?? undefined, miniAppUrl);
+  const newBot = await createBot(
+    env.BOT_TOKEN,
+    traktService as TraktService,
+    oauthService ?? undefined,
+  );
   await newBot.init();
   bot = newBot;
   botToken = env.BOT_TOKEN;
@@ -111,23 +109,77 @@ async function ensureBot(env: Env, request: Request): Promise<BotInstance | null
   return bot;
 }
 
+async function handleAuthStart(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const state = url.searchParams.get('state');
+
+  if (!state || !env.TRAKT_CLIENT_ID) {
+    return new Response('Missing state or Trakt client ID', { status: 400 });
+  }
+
+  const telegramId = Number(state.split('_')[0]);
+  let currentUsername: string | undefined;
+  let currentAvatarUrl: string | undefined;
+
+  if (telegramId && env.STORE) {
+    try {
+      const storage = new StorageService(env.STORE);
+      const data = await storage.getOAuthData(telegramId);
+      if (data) {
+        currentUsername = data.username ?? undefined;
+        currentAvatarUrl = (data as any).avatarUrl ?? undefined;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const redirectUri = env.OAUTH_REDIRECT_URI || `${baseUrl(request)}/auth/callback`;
+
+  // Primary authorize URL — uses existing Trakt session if available.
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: env.TRAKT_CLIENT_ID,
+    redirect_uri: redirectUri,
+    state,
+  });
+  const traktUrl = `https://auth.trakt.tv/oauth/authorize?${params.toString()}`;
+
+  // Secondary authorize URL — forces Trakt to ask for login again.
+  const switchParams = new URLSearchParams({
+    response_type: 'code',
+    client_id: env.TRAKT_CLIENT_ID,
+    redirect_uri: redirectUri,
+    state,
+    prompt: 'login',
+  });
+  const switchUrl = `https://auth.trakt.tv/oauth/authorize?${switchParams.toString()}`;
+
+  const html = renderAuthStartPage({
+    traktUrl,
+    switchUrl,
+    currentUsername,
+    currentAvatarUrl,
+  });
+
+  return new Response(html, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    // ---- Health check ----
     if (url.pathname === '/' || url.pathname === '/health') {
       return new Response('ok');
     }
 
-    // ---- Admin: set Telegram webhook ----
     if (url.pathname === '/admin/set-webhook' && request.method === 'POST') {
       if (!env.ADMIN_SECRET || request.headers.get('x-admin-secret') !== env.ADMIN_SECRET) {
         return new Response('Unauthorized', { status: 401 });
       }
-      if (!env.BOT_TOKEN) {
-        return new Response('BOT_TOKEN not set', { status: 500 });
-      }
+      if (!env.BOT_TOKEN) return new Response('BOT_TOKEN not set', { status: 500 });
       const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/setWebhook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -143,14 +195,11 @@ export default {
       });
     }
 
-    // ---- Admin: webhook info ----
     if (url.pathname === '/admin/webhook-info' && request.method === 'GET') {
       if (!env.ADMIN_SECRET || request.headers.get('x-admin-secret') !== env.ADMIN_SECRET) {
         return new Response('Unauthorized', { status: 401 });
       }
-      if (!env.BOT_TOKEN) {
-        return new Response('BOT_TOKEN not set', { status: 500 });
-      }
+      if (!env.BOT_TOKEN) return new Response('BOT_TOKEN not set', { status: 500 });
       const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getWebhookInfo`);
       return new Response(await res.text(), {
         status: res.status,
@@ -158,14 +207,11 @@ export default {
       });
     }
 
-    // ---- Admin: delete webhook ----
     if (url.pathname === '/admin/delete-webhook' && request.method === 'POST') {
       if (!env.ADMIN_SECRET || request.headers.get('x-admin-secret') !== env.ADMIN_SECRET) {
         return new Response('Unauthorized', { status: 401 });
       }
-      if (!env.BOT_TOKEN) {
-        return new Response('BOT_TOKEN not set', { status: 500 });
-      }
+      if (!env.BOT_TOKEN) return new Response('BOT_TOKEN not set', { status: 500 });
       const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/deleteWebhook`);
       return new Response(await res.text(), {
         status: res.status,
@@ -173,19 +219,58 @@ export default {
       });
     }
 
-    // ---- OAuth callback ----
-    if (url.pathname === '/auth/callback' && request.method === 'GET') {
-      return handleOAuthCallback(request, env);
+    if (url.pathname === '/api/img' && request.method === 'GET') {
+      const target = url.searchParams.get('u');
+      if (!target) return new Response('Missing u', { status: 400 });
+
+      // Only allow Trakt media hosts
+      let parsed: URL;
+      try {
+        parsed = new URL(target);
+      } catch {
+        return new Response('Invalid url', { status: 400 });
+      }
+      const allowedHosts = ['media.trakt.tv', 'walter.trakt.tv', 'secure.gravatar.com'];
+      if (!allowedHosts.includes(parsed.hostname)) {
+        return new Response('Host not allowed', { status: 403 });
+      }
+
+      const imgRes = await fetch(parsed.toString(), {
+        headers: { 'User-Agent': 'TraktGram/1.0' },
+      });
+      if (!imgRes.ok) {
+        return new Response('Upstream error', { status: 502 });
+      }
+
+      const contentType = imgRes.headers.get('content-type') ?? 'image/jpeg';
+      const body = await imgRes.arrayBuffer();
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
     }
 
-    // ---- Mini App HTML ----
+
+    if (url.pathname === '/auth/start' && request.method === 'GET') {
+      return handleAuthStart(request, env);
+    }
+
     if (url.pathname === '/miniapp' && request.method === 'GET') {
       const deepLink = url.searchParams.get('deepLink') ?? undefined;
       const html = renderMiniAppPage(deepLink);
-      return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      return new Response(html, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      });
     }
 
-    // ---- Mini App API ----
+
     if (url.pathname.startsWith('/api/')) {
       const traktService = createTraktService(env);
       const oauthService = createOAuthService(env, request);
@@ -198,7 +283,10 @@ export default {
       return apiResponse ?? new Response('Not Found', { status: 404 });
     }
 
-    // ---- Telegram webhook ----
+    if (url.pathname === '/auth/callback' && request.method === 'GET') {
+      return handleOAuthCallback(request, env);
+    }
+
     if (url.pathname !== '/webhook' || request.method !== 'POST') {
       return new Response('Not Found', { status: 404 });
     }

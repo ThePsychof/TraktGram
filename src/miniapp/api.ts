@@ -30,7 +30,7 @@ function parseTelegramId(request: Request, url: URL): number | null {
 
 async function requireAccessToken(
   telegramId: number,
-  oauthService: OAuthService
+  oauthService: OAuthService,
 ): Promise<string | Response> {
   const accessToken = await oauthService.getValidAccessToken(telegramId);
   if (!accessToken) {
@@ -43,7 +43,7 @@ export async function handleMiniAppApiRequest(
   request: Request,
   url: URL,
   traktService: TraktService,
-  oauthService?: OAuthService
+  oauthService?: OAuthService,
 ): Promise<Response | null> {
   const segments = url.pathname.split('/').filter(Boolean);
   if (segments.length < 3 || segments[0] !== 'api' || segments[1] !== 'miniapp') {
@@ -54,6 +54,84 @@ export async function handleMiniAppApiRequest(
     return jsonError('Method not allowed', 405);
   }
 
+  // ---- /api/miniapp/me ----
+  if (segments[2] === 'me') {
+    if (!oauthService) {
+      return jsonError('OAuth not configured on backend.', 500);
+    }
+
+    const telegramId = parseTelegramId(request, url);
+    if (!telegramId) {
+      return jsonError('telegramId is required', 400);
+    }
+
+    const accessToken = await oauthService.getValidAccessToken(telegramId);
+    if (!accessToken) {
+      return jsonError('Not connected. Use /login first.', 401);
+    }
+
+    try {
+      const [profile, stats, history] = await Promise.all([
+        traktService.getUserProfile(accessToken).catch(() => null),
+        traktService.getUserStats(accessToken),
+        traktService.getHistory(accessToken, '', 1, 5).catch(() => []),
+      ]);
+
+      const oauthData = await oauthService.getAuthenticatedUser(telegramId);
+      const rawAvatarUrl =
+        oauthData?.avatarUrl ??
+        profile?.images?.avatar?.full ??
+        profile?.images?.avatar ??
+        (typeof profile?.images?.avatar === 'string' ? profile.images.avatar : undefined);
+
+      // Proxy through our own origin so Telegram's WebView will load it.
+      const avatarUrl = rawAvatarUrl
+        ? `/api/img?u=${encodeURIComponent(rawAvatarUrl)}`
+        : null;
+
+      const recentHistory = (history ?? []).map((entry: any) => {
+        const kind = entry.type;
+        let title = 'Unknown';
+        if (kind === 'movie' && entry.movie) {
+          title = `${entry.movie.title ?? 'Unknown'}${entry.movie.year ? ` (${entry.movie.year})` : ''}`;
+        } else if (kind === 'episode' && entry.episode) {
+          const s = entry.episode.season ?? 0;
+          const n = entry.episode.number ?? 0;
+          const show = entry.show?.title ?? entry.show?.name ?? 'Unknown';
+          title = `${show} S${String(s).padStart(2, '0')}E${String(n).padStart(2, '0')}`;
+        }
+        return {
+          title,
+          watchedAt: entry.watched_at ?? null,
+        };
+      });
+
+      return jsonResponse({
+        profile: {
+          username: profile?.username ?? null,
+          name: profile?.name ?? profile?.username ?? null,
+          avatar: avatarUrl ?? null,
+        },
+        watchTime: {
+          movies: stats.movieMinutes,
+          episodes: stats.episodeMinutes,
+          total: stats.totalMinutes,
+        },
+        stats: {
+          moviesWatched: stats.moviesWatched,
+          episodesWatched: stats.episodesWatched,
+          totalPlays: stats.moviesWatched + stats.episodesWatched,
+          ratingsGiven: stats.ratingsGiven,
+          available: stats.available,
+        },
+        recentHistory,
+      });
+    } catch (err) {
+      return jsonError('Failed to load profile data.', 500);
+    }
+  }
+
+  // ---- /api/miniapp/public/* ----
   const scope = segments[2];
   if (scope === 'public') {
     const target = segments[3] ?? '';
@@ -91,6 +169,7 @@ export async function handleMiniAppApiRequest(
     return jsonError('Public mini app route not found.', 404);
   }
 
+  // ---- /api/miniapp/user/* ----
   if (scope === 'user') {
     if (!oauthService) {
       return jsonError('OAuth not configured on backend.', 500);

@@ -3,33 +3,25 @@ import { InlineKeyboard } from 'grammy';
 import type { OAuthService } from '../services/oauth';
 import logger from '../utils/logger';
 
-/**
- * Register `/login` command
- * Initiates Trakt OAuth login flow
- */
 export function registerLogin(bot: Bot, oauthService: OAuthService) {
   bot.command('login', async (ctx) => {
     try {
       const telegramId = ctx.from?.id;
       if (!telegramId) {
-        logger.warn('Login command called with no user ID');
-        await ctx.reply('❌ Unable to identify your account. Please try again.');
+        await ctx.reply('❌ Unable to identify your account.');
         return;
       }
 
-      logger.info('Login command initiated', { telegramId });
+      const state = await oauthService.createOAuthState(telegramId);
+      const base = oauthService.getBaseUrl();
+      const pageUrl = `${base}/auth/start?state=${encodeURIComponent(state)}`;
 
-      // Generate OAuth authorization URL
-      const authUrl = await oauthService.generateAuthorizationUrl(telegramId);
+      const keyboard = new InlineKeyboard().url('🔐 Connect Trakt', pageUrl);
 
-      // Create inline keyboard with login button
-      const keyboard = new InlineKeyboard().url('Login with Trakt', authUrl);
-
-      await ctx.reply('🔐 Connect your Trakt account\n\nClick the button below to authorize TraktGram to access your Trakt data.', {
-        reply_markup: keyboard,
-      });
-
-      logger.info('Login button sent to user', { telegramId });
+      await ctx.reply(
+        '🔐 Connect your Trakt account\n\nTap the button below to choose how you want to sign in.',
+        { reply_markup: keyboard },
+      );
     } catch (error) {
       logger.error('Error in login command', error);
       await ctx.reply('❌ An error occurred. Please try again later.');

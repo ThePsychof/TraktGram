@@ -1,12 +1,14 @@
 import type { StoredOAuthData } from '../types/oauth';
 import logger from '../utils/logger';
 
-/**
- * StorageService: Abstraction layer for Cloudflare KV storage
- * Handles persistence of OAuth data for authenticated users
- */
+export interface PendingWatchTime {
+  type: string;
+  id: number;
+  title?: string;
+}
+
 export class StorageService {
-  constructor(private kv: KVNamespace) {
+  constructor(public readonly kv: KVNamespace) {
     if (!this.kv) {
       logger.warn('KV namespace not initialized - storage will not persist');
     }
@@ -20,15 +22,15 @@ export class StorageService {
     return `state:${state}`;
   }
 
-  /**
-   * Store OAuth data for a user
-   */
+  private getPendingWatchTimeKey(telegramId: number): string {
+    return `pending:watchtime:${telegramId}`;
+  }
+
   async storeOAuthData(data: StoredOAuthData): Promise<void> {
     if (!this.kv) {
       logger.warn('KV namespace not available - cannot store OAuth data');
       return;
     }
-
     try {
       const key = this.getOAuthKey(data.telegramId);
       await this.kv.put(key, JSON.stringify(data));
@@ -39,15 +41,11 @@ export class StorageService {
     }
   }
 
-  /**
-   * Retrieve OAuth data for a user
-   */
   async getOAuthData(telegramId: number): Promise<StoredOAuthData | null> {
     if (!this.kv) {
       logger.warn('KV namespace not available - cannot retrieve OAuth data');
       return null;
     }
-
     try {
       const key = this.getOAuthKey(telegramId);
       const data = await this.kv.get(key, 'json');
@@ -62,14 +60,8 @@ export class StorageService {
     }
   }
 
-  /**
-   * Delete OAuth data for a user (logout)
-   */
   async deleteOAuthData(telegramId: number): Promise<void> {
-    if (!this.kv) {
-      return;
-    }
-
+    if (!this.kv) return;
     try {
       const key = this.getOAuthKey(telegramId);
       await this.kv.delete(key);
@@ -79,19 +71,14 @@ export class StorageService {
     }
   }
 
-  /**
-   * Store OAuth state for CSRF protection
-   * State expires after 10 minutes
-   */
   async storeOAuthState(state: string, telegramId: number): Promise<void> {
     if (!this.kv) {
       logger.warn('KV namespace not available - cannot store OAuth state');
       return;
     }
-
     try {
       const key = this.getStateKey(state);
-      const expirationTtl = 10 * 60; // 10 minutes
+      const expirationTtl = 10 * 60;
       await this.kv.put(key, JSON.stringify({ telegramId, createdAt: Date.now() }), { expirationTtl });
       logger.info('Stored OAuth state', { state: state.slice(0, 8) });
     } catch (error) {
@@ -100,28 +87,19 @@ export class StorageService {
     }
   }
 
-  /**
-   * Verify and consume OAuth state
-   * Returns telegramId if valid, null if invalid or expired
-   */
   async verifyOAuthState(state: string): Promise<number | null> {
     if (!this.kv) {
       logger.warn('KV namespace not available - cannot verify OAuth state');
       return null;
     }
-
     try {
       const key = this.getStateKey(state);
       const stateData = await this.kv.get(key, 'json');
-
       if (!stateData) {
         logger.warn('Invalid or expired OAuth state', { state: state.slice(0, 8) });
         return null;
       }
-
-      // Consume the state by deleting it
       await this.kv.delete(key);
-
       const data = stateData as { telegramId: number; createdAt: number };
       logger.info('Verified OAuth state', { telegramId: data.telegramId });
       return data.telegramId;
@@ -131,21 +109,49 @@ export class StorageService {
     }
   }
 
-  /**
-   * Check if a user is authenticated
-   */
   async isAuthenticated(telegramId: number): Promise<boolean> {
     const data = await this.getOAuthData(telegramId);
-    if (!data) {
-      return false;
-    }
-
-    // Check if token is expired
+    if (!data) return false;
     if (data.expiresAt < Date.now()) {
       logger.info('Token expired for user', { telegramId });
       return false;
     }
-
     return true;
+  }
+
+  // ---- Pending watch time (5 minute TTL) ----
+
+  async setPendingWatchTime(telegramId: number, pending: PendingWatchTime): Promise<void> {
+    if (!this.kv) return;
+    try {
+      const key = this.getPendingWatchTimeKey(telegramId);
+      await this.kv.put(key, JSON.stringify(pending), { expirationTtl: 300 });
+      logger.info('Stored pending watch time', { telegramId, type: pending.type, id: pending.id });
+    } catch (error) {
+      logger.error('Failed to store pending watch time', error);
+      throw new Error('Failed to start watch time flow');
+    }
+  }
+
+  async getPendingWatchTime(telegramId: number): Promise<PendingWatchTime | null> {
+    if (!this.kv) return null;
+    try {
+      const key = this.getPendingWatchTimeKey(telegramId);
+      const raw = await this.kv.get(key, 'json');
+      return (raw as PendingWatchTime) ?? null;
+    } catch (error) {
+      logger.error('Failed to get pending watch time', error);
+      return null;
+    }
+  }
+
+  async clearPendingWatchTime(telegramId: number): Promise<void> {
+    if (!this.kv) return;
+    try {
+      const key = this.getPendingWatchTimeKey(telegramId);
+      await this.kv.delete(key);
+    } catch (error) {
+      logger.error('Failed to clear pending watch time', error);
+    }
   }
 }

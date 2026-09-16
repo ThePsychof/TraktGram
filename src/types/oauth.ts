@@ -34,6 +34,7 @@ export interface StoredOAuthData {
   createdAt: number;
   username?: string;
   userId?: number;
+  avatarUrl?: string;
 }
 
 export interface OAuthCallbackParams {

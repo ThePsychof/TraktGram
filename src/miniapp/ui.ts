@@ -1,373 +1,168 @@
-export function renderMiniAppPage(deepLink?: string) {
+export function renderMiniAppPage(_deepLink?: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Trakt</title>
+  <title>TraktGram</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000; color: #fff; }
-    header { background: #1a1a1a; padding: 12px 16px; border-bottom: 1px solid #222; position: sticky; top: 0; z-index: 100; }
-    header h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.5px; color: #e50000; }
-    main { max-width: 100%; }
-    nav { display: flex; gap: 6px; padding: 12px 16px 0; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid #222; }
-    nav::-webkit-scrollbar { display: none; }
-    nav button { background: transparent; border: none; color: #999; padding: 8px 12px; cursor: pointer; font-size: 13px; white-space: nowrap; flex-shrink: 0; transition: all 0.2s; font-weight: 500; }
-    nav button:hover { color: #fff; }
-    nav button.active { color: #e50000; border-bottom: 2px solid #e50000; }
-    .content { padding: 16px; max-width: 900px; margin: 0 auto; }
-    .status { padding: 12px 16px; background: #1a1a1a; border-radius: 4px; margin-bottom: 16px; color: #999; font-size: 13px; }
-    .status.error { color: #ff6b6b; }
-    .hidden { display: none; }
-    .card { background: #141414; border-radius: 6px; padding: 16px; margin-bottom: 12px; border: 1px solid #222; transition: all 0.2s; }
-    .card:hover { border-color: #333; }
-    .card h2 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
-    .card p { margin: 4px 0; color: #999; font-size: 13px; line-height: 1.5; }
-    .card .meta { color: #666; font-size: 12px; }
-    .card .actions { display: flex; gap: 8px; margin-top: 12px; }
-    .btn { background: #e50000; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-    .btn:hover { background: #ff0000; }
-    .btn-secondary { background: #2a2a2a; color: #fff; }
-    .btn-secondary:hover { background: #3a3a3a; }
-    .list-item { background: #0a0a0a; border-left: 3px solid #e50000; padding: 12px 16px; margin-bottom: 8px; border-radius: 2px; cursor: pointer; transition: all 0.2s; }
-    .list-item:hover { background: #141414; border-left-color: #ff0000; }
-    .item-title { font-size: 14px; font-weight: 500; }
-    .item-meta { font-size: 12px; color: #666; margin-top: 4px; }
-    .section-title { margin: 20px 0 12px; font-size: 14px; font-weight: 600; color: #999; }
-    .empty { text-align: center; padding: 40px 20px; color: #666; font-size: 13px; }
-    .profile-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
-    .stat { background: #0a0a0a; padding: 12px; border-radius: 4px; text-align: center; border: 1px solid #222; }
-    .stat-value { font-size: 20px; font-weight: 700; color: #e50000; }
-    .stat-label { font-size: 11px; color: #666; margin-top: 4px; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #fff; padding: 24px 16px; min-height: 100vh; }
+    .card { max-width: 480px; margin: 0 auto; background: #141414; border-radius: 16px; padding: 24px; border: 1px solid #222; }
+    .avatar { width: 96px; height: 96px; border-radius: 50%; background: #333; margin: 0 auto 16px; display: block; object-fit: cover; }
+    .avatar-fallback { width: 96px; height: 96px; border-radius: 50%; background: #222; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 40px; color: #666; }
+    .name { text-align: center; font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .handle { text-align: center; color: #888; font-size: 14px; margin-bottom: 24px; }
+    .stat { text-align: center; padding: 20px; background: #0a0a0a; border-radius: 12px; margin-bottom: 24px; border: 1px solid #1f1f1f; }
+    .stat-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .stat-value { font-size: 28px; font-weight: 700; color: #e50000; }
+    .stat-sub { color: #666; font-size: 12px; margin-top: 6px; }
+    .stat-unavailable { color: #888; font-size: 12px; line-height: 1.5; }
+    h3 { font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px; }
+    .history-item { display: flex; align-items: center; padding: 10px 12px; background: #0a0a0a; border-radius: 8px; margin-bottom: 6px; border-left: 3px solid #e50000; }
+    .history-item .title { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .history-item .date { color: #666; font-size: 11px; margin-left: 8px; flex-shrink: 0; }
+    .loading, .error { text-align: center; padding: 40px; color: #666; }
+    .error { color: #ff5555; }
+    .note { font-size: 11px; color: #666; margin-top: 6px; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>trakt</h1>
-  </header>
-  <nav id="nav"></nav>
-  <div class="content">
-    <section id="status" class="status hidden"></section>
-    <section id="screen"></section>
+  <div class="card" id="card">
+    <div class="loading">Loading…</div>
   </div>
   <script>
-    const webApp = window.Telegram?.WebApp ?? null;
+    var webApp = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
     if (webApp) {
-      webApp.expand();
+      try { webApp.expand(); } catch (e) {}
+      try { if (webApp.setHeaderColor) webApp.setHeaderColor('#0a0a0a'); } catch (e) {}
     }
 
-    const root = document.getElementById('screen');
-    const nav = document.getElementById('nav');
-    const status = document.getElementById('status');
-    const state = {
-      screen: 'home',
-      telegramId: null,
-      deepLink: '${deepLink ?? ''}',
-    };
-
-    function setStatus(message, isError = false) {
-      status.classList.remove('hidden');
-      status.classList.toggle('error', isError);
-      status.textContent = message;
-    }
-
-    function clearStatus() {
-      status.classList.add('hidden');
-    }
-
-    function parseTelegramId() {
-      const query = new URLSearchParams(location.search);
-      const fromQuery = query.get('telegramId');
-      if (fromQuery && Number(fromQuery) > 0) {
-        return fromQuery;
-      }
-      const initUser = webApp?.initDataUnsafe?.user;
-      return initUser?.id ? String(initUser.id) : null;
-    }
-
-    async function fetchJson(path) {
-      setStatus('Loading...');
+    function getTelegramId() {
       try {
-        const url = new URL(path, location.origin);
-        const isUserEndpoint = url.pathname.includes('/api/miniapp/user/');
-        
-        if (isUserEndpoint && !state.telegramId) {
-          throw new Error('telegramId is required in header x-telegram-user-id or query.');
+        var q = new URLSearchParams(location.search);
+        var fromQuery = q.get('telegramId');
+        if (fromQuery) return fromQuery;
+      } catch (e) {}
+      try {
+        var u = webApp && webApp.initDataUnsafe && webApp.initDataUnsafe.user;
+        if (u && u.id) return String(u.id);
+      } catch (e) {}
+      try {
+        var raw = webApp && webApp.initData;
+        if (raw) {
+          var params = new URLSearchParams(raw);
+          var userJson = params.get('user');
+          if (userJson) {
+            var parsed = JSON.parse(userJson);
+            if (parsed && parsed.id) return String(parsed.id);
+          }
         }
-        
-        const options = {
-          headers: {}
-        };
-        if (state.telegramId) {
-          options.headers['x-telegram-user-id'] = state.telegramId;
-        }
-        const response = await fetch(url.toString(), options);
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.error || response.statusText || 'Request failed');
-        }
-        const json = await response.json();
-        clearStatus();
-        return json;
-      } catch (error) {
-        setStatus(error.message || 'Network error', true);
-        throw error;
-      }
+      } catch (e) {}
+      return null;
     }
 
-    function renderNav() {
-      nav.innerHTML = '';
-      const items = [
-        { id: 'home', label: 'Home' },
-        { id: 'trending', label: 'Trending' },
-        { id: 'continue', label: 'Watching' },
-        { id: 'calendar', label: 'Calendar' },
-        { id: 'watchlist', label: 'Watchlist' },
-        { id: 'history', label: 'History' },
-        { id: 'profile', label: 'Profile' },
-      ];
-      items.forEach((item) => {
-        const button = document.createElement('button');
-        button.textContent = item.label;
-        button.className = state.screen === item.id ? 'active' : '';
-        button.addEventListener('click', () => navigate(item.id));
-        nav.appendChild(button);
-      });
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     }
 
-    function navigate(screen) {
-      state.screen = screen;
-      renderNav();
-      if (screen === 'home') renderHome();
-      if (screen === 'trending') renderTrending();
-      if (screen === 'continue') renderContinue();
-      if (screen === 'calendar') renderCalendar();
-      if (screen === 'watchlist') renderWatchlist();
-      if (screen === 'history') renderHistory();
-      if (screen === 'profile') renderProfile();
+    function formatTime(m) {
+      var n = Number(m);
+      if (!n || !isFinite(n) || n <= 0) return '0m';
+      var d = Math.floor(n / 1440);
+      var h = Math.floor((n % 1440) / 60);
+      var mn = n % 60;
+      var parts = [];
+      if (d) parts.push(d + 'd');
+      if (h) parts.push(h + 'h');
+      if (mn) parts.push(mn + 'm');
+      return parts.join(' ') || '0m';
     }
 
-    function renderItemCard(item, type, compact = true) {
-      if (compact) {
-        const div = document.createElement('div');
-        div.className = 'list-item';
-        const title = document.createElement('div');
-        title.className = 'item-title';
-        title.textContent = item.title || item.name || 'Untitled';
-        const meta = document.createElement('div');
-        meta.className = 'item-meta';
-        const year = item.year || item.first_aired?.slice(0, 4) || '';
-        meta.textContent = [type.toUpperCase(), year].filter(Boolean).join(' • ');
-        div.appendChild(title);
-        div.appendChild(meta);
-        div.addEventListener('click', () => showDetails(type, item.ids?.trakt || item.id));
-        return div;
-      }
-      const card = document.createElement('article');
-      card.className = 'card';
-      const title = document.createElement('h2');
-      title.textContent = item.title || item.name || 'Untitled';
-      card.appendChild(title);
-      const meta = document.createElement('p');
-      meta.className = 'meta';
-      const year = item.year || item.first_aired?.slice(0, 4) || '';
-      meta.textContent = [type.toUpperCase(), year].filter(Boolean).join(' • ');
-      card.appendChild(meta);
-      if (item.overview || item.tagline) {
-        const overview = document.createElement('p');
-        overview.textContent = item.overview || item.tagline || '';
-        card.appendChild(overview);
-      }
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-      const detailsButton = document.createElement('button');
-      detailsButton.className = 'btn';
-      detailsButton.textContent = 'View';
-      detailsButton.addEventListener('click', () => showDetails(type, item.ids?.trakt || item.id));
-      actions.appendChild(detailsButton);
-      card.appendChild(actions);
-      return card;
-    }
-
-    function renderList(titleText, items, type, compact = true) {
-      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">' + titleText + '</h2>';
-      if (!items || items.length === 0) {
-        root.innerHTML += '<div class="empty">No items</div>';
+    function load() {
+      var card = document.getElementById('card');
+      var tgId = getTelegramId();
+      if (!tgId) {
+        card.innerHTML = '<div class="error">Open this from inside Telegram.</div>';
         return;
       }
-      items.forEach((item) => {
-        const card = renderItemCard(item, type, compact);
-        root.appendChild(card);
-      });
-    }
-
-    async function renderHome() {
-      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Home</h2><div class="status">Loading...</div>';
-      try {
-        const trendingPromise = fetchJson('/api/miniapp/public/trending?limit=5');
-        const continuePromise = fetchJson('/api/miniapp/user/continue?limit=5').catch(() => ({ items: [] }));
-        const [trending, continueData] = await Promise.allSettled([trendingPromise, continuePromise]);
-        root.innerHTML = '';
-        
-        const trendingData = trending.status === 'fulfilled' ? trending.value : { items: [] };
-        if (trendingData.items && trendingData.items.length > 0) {
-          const title = document.createElement('h2');
-          title.className = 'section-title';
-          title.textContent = 'Trending Now';
-          root.appendChild(title);
-          trendingData.items.forEach((item) => {
-            root.appendChild(renderItemCard(item, item.type === 'show' ? 'show' : 'movie', true));
+      fetch('/api/miniapp/me', { headers: { 'x-telegram-user-id': tgId } })
+        .then(function (res) {
+          return res.text().then(function (text) {
+            var data = null;
+            try { data = JSON.parse(text); } catch (e) {}
+            if (!res.ok) {
+              var msg = (data && data.error) ? data.error : ('HTTP ' + res.status);
+              card.innerHTML = '<div class="error">' + esc(msg) + '</div>';
+              return;
+            }
+            render(card, data);
           });
-        }
-
-        const continueDataItems = continueData.status === 'fulfilled' ? continueData.value : { items: [] };
-        if (continueDataItems.items && continueDataItems.items.length > 0) {
-          const title = document.createElement('h2');
-          title.className = 'section-title';
-          title.textContent = 'Continue Watching';
-          root.appendChild(title);
-          continueDataItems.items.forEach((item) => {
-            root.appendChild(renderItemCard(item, 'show', true));
-          });
-        }
-
-        if (root.children.length === 0) {
-          root.innerHTML = '<div class="empty">No data available</div>';
-        }
-      } catch (error) {
-        root.innerHTML = '<div class="empty">Unable to load home</div>';
-      }
-    }
-
-    async function renderTrending() {
-      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Trending</h2><div class="status">Loading...</div>';
-      try {
-        const data = await fetchJson('/api/miniapp/public/trending?limit=20');
-        renderList('Trending', data.items, 'movie', true);
-      } catch (error) {
-        root.innerHTML = '<div class="empty">Unable to load trending</div>';
-      }
-    }
-
-    async function renderContinue() {
-      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Continue Watching</h2><div class="status">Loading...</div>';
-      try {
-        const data = await fetchJson('/api/miniapp/user/continue?limit=20');
-        renderList('Continue Watching', data.items, 'show', true);
-      } catch (error) {
-        root.innerHTML = '<div class="empty">Unable to load continue watching</div>';
-      }
-    }
-
-    async function renderCalendar() {
-      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Calendar</h2><div class="status">Loading...</div>';
-      try {
-        const data = await fetchJson('/api/miniapp/user/calendar');
-        if (!data.items || data.items.length === 0) {
-          root.innerHTML = '<div class="empty">No upcoming episodes</div>';
-          return;
-        }
-        root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Upcoming Episodes</h2>';
-        data.items.slice(0, 20).forEach((item) => {
-          const div = document.createElement('div');
-          div.className = 'list-item';
-          const title = document.createElement('div');
-          title.className = 'item-title';
-          const label = item.episode ? (item.show?.title || item.show?.name || 'Show') + ' - S' + item.episode.season + 'E' + item.episode.number : (item.movie?.title || item.movie?.name || 'Movie');
-          title.textContent = label;
-          const meta = document.createElement('div');
-          meta.className = 'item-meta';
-          meta.textContent = item.first_aired || item.released || 'Unknown date';
-          div.appendChild(title);
-          div.appendChild(meta);
-          root.appendChild(div);
+        })
+        .catch(function (err) {
+          var msg = (err && err.message) ? err.message : 'unknown error';
+          card.innerHTML = '<div class="error">Request failed: ' + esc(msg) + '</div>';
         });
-      } catch (error) {
-        root.innerHTML = '<div class="empty">Unable to load calendar</div>';
-      }
     }
 
-    async function renderWatchlist() {
-      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Watchlist</h2><div class="status">Loading...</div>';
-      try {
-        const data = await fetchJson('/api/miniapp/user/watchlist');
-        renderList('Watchlist', data.items, 'movie', true);
-      } catch (error) {
-        root.innerHTML = '<div class="empty">Unable to load watchlist</div>';
+    function render(card, data) {
+      if (!data || typeof data !== 'object') {
+        card.innerHTML = '<div class="error">Malformed response.</div>';
+        return;
       }
-    }
+      var p = data.profile || {};
+      var wt = data.watchTime || { movies: 0, episodes: 0, total: 0 };
+      var stats = data.stats || { available: false };
+      var hist = Array.isArray(data.recentHistory) ? data.recentHistory : [];
 
-    async function renderHistory() {
-      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">History</h2><div class="status">Loading...</div>';
-      try {
-        const data = await fetchJson('/api/miniapp/user/history');
-        renderList('History', data.items, 'history', true);
-      } catch (error) {
-        root.innerHTML = '<div class="empty">Unable to load history</div>';
+      var avatarHtml;
+      if (p.avatar) {
+        avatarHtml = '<img class="avatar" src="' + esc(p.avatar) + '" alt="" />';
+      } else {
+        avatarHtml = '<div class="avatar-fallback">👤</div>';
       }
-    }
 
-    async function renderProfile() {
-      root.innerHTML = '<h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 600;">Profile</h2><div class="status">Loading...</div>';
-      try {
-        const data = await fetchJson('/api/miniapp/user/profile');
-        const profile = data.profile || {};
-        const watchlistCount = ((profile.stats?.watchlist?.movies ?? 0) + (profile.stats?.watchlist?.shows ?? 0)) || 0;
-        const collectionCount = ((profile.stats?.collection?.movies ?? 0) + (profile.stats?.collection?.shows ?? 0)) || 0;
-        root.innerHTML = '<div class="card"><h2>' + (profile.username || 'Unknown user') + '</h2><p class="meta">Trakt ID: ' + (profile.userId || 'Unknown') + '</p><div class="profile-stats"><div class="stat"><div class="stat-value">' + (profile.stats?.movies?.watched ?? 0) + '</div><div class="stat-label">Movies watched</div></div><div class="stat"><div class="stat-value">' + (profile.stats?.episodes?.watched ?? 0) + '</div><div class="stat-label">Episodes watched</div></div><div class="stat"><div class="stat-value">' + watchlistCount + '</div><div class="stat-label">Watchlist</div></div><div class="stat"><div class="stat-value">' + (profile.stats?.ratings?.total ?? 0) + '</div><div class="stat-label">Ratings</div></div></div></div>';
-      } catch (error) {
-        root.innerHTML = '<div class="empty">Unable to load profile</div>';
+      var name = esc(p.name || p.username || 'Unknown');
+      var handle = p.username ? '@' + esc(p.username) : '';
+
+      var statHtml;
+      if (stats.available === false) {
+        statHtml = '<div class="stat"><div class="stat-label">Total watched</div>'
+          + '<div class="stat-unavailable">⚠️ Trakt stats are temporarily unavailable.<br>'
+          + 'This is a known issue on Trakt\\'s side.</div></div>';
+      } else {
+        statHtml = '<div class="stat"><div class="stat-label">Total watched</div>'
+          + '<div class="stat-value">' + formatTime(wt.total) + '</div>'
+          + '<div class="stat-sub">Movies ' + formatTime(wt.movies)
+          + ' · Episodes ' + formatTime(wt.episodes) + '</div></div>';
       }
-    }
 
-    async function showDetails(type, id) {
-      root.innerHTML = '<div class="status">Loading...</div>';
-      try {
-        const data = await fetchJson('/api/miniapp/public/item/' + type + '/' + id);
-        const item = data.item;
-        root.innerHTML = '';
-        const card = document.createElement('div');
-        card.className = 'card';
-        const title = document.createElement('h2');
-        title.textContent = item.title || item.name || 'Unknown';
-        card.appendChild(title);
-        const meta = document.createElement('p');
-        meta.className = 'meta';
-        const year = item.year || item.first_aired?.slice(0, 4) || '';
-        meta.textContent = [type.toUpperCase(), year].filter(Boolean).join(' • ');
-        card.appendChild(meta);
-        const description = document.createElement('p');
-        description.textContent = item.overview || 'No description available.';
-        card.appendChild(description);
-        const actions = document.createElement('div');
-        actions.className = 'actions';
-        const backButton = document.createElement('button');
-        backButton.className = 'btn';
-        backButton.textContent = 'Back';
-        backButton.addEventListener('click', () => navigate('home'));
-        actions.appendChild(backButton);
-        card.appendChild(actions);
-        root.appendChild(card);
-      } catch (error) {
-        root.innerHTML = '<div class="empty">Unable to load details</div>';
-      }
-    }
-
-    function initialize() {
-      state.telegramId = parseTelegramId();
-      renderNav();
-      if (state.deepLink) {
-        const [type, id] = state.deepLink.split('_');
-        if (type && id) {
-          showDetails(type, id);
-          return;
+      var histHtml = '<h3>Recent</h3>';
+      if (!hist.length) {
+        histHtml += '<div class="loading" style="padding:20px 0;">No recent activity.</div>';
+      } else {
+        for (var i = 0; i < hist.length; i++) {
+          var item = hist[i] || {};
+          var title = esc(item.title || 'Unknown');
+          var date = item.watchedAt ? esc(String(item.watchedAt).slice(0, 10)) : '';
+          histHtml += '<div class="history-item"><div class="title">' + title
+            + '</div><div class="date">' + date + '</div></div>';
         }
       }
-      navigate('home');
+
+      card.innerHTML = avatarHtml
+        + '<div class="name">' + name + '</div>'
+        + '<div class="handle">' + handle + '</div>'
+        + statHtml
+        + histHtml;
     }
 
-    document.addEventListener('DOMContentLoaded', initialize);
+    load();
   </script>
 </body>
 </html>`;

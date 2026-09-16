@@ -1,33 +1,24 @@
 import type { Bot } from 'grammy';
 import type { OAuthService } from '../services/oauth';
+import type { TraktService } from '../services/trakt';
+import { formatWatchTime } from '../utils/format';
 import logger from '../utils/logger';
 
-/**
- * Register `/me` command
- * Shows current user's authenticated Trakt account info
- */
-export function registerMe(bot: Bot, oauthService: OAuthService) {
+export function registerMe(bot: Bot, oauthService: OAuthService, traktService?: TraktService) {
   bot.command('me', async (ctx) => {
     try {
       const telegramId = ctx.from?.id;
       if (!telegramId) {
-        logger.warn('Me command called with no user ID');
-        await ctx.reply('❌ Unable to identify your account. Please try again.');
+        await ctx.reply('❌ Unable to identify your account.');
         return;
       }
 
-      logger.info('Me command called', { telegramId });
-
-      // Get user's OAuth data
       const userData = await oauthService.getAuthenticatedUser(telegramId);
-
       if (!userData) {
-        await ctx.reply('❌ No Trakt account connected.\n\nUse /login to connect your Trakt account.');
-        logger.info('User not authenticated', { telegramId });
+        await ctx.reply('❌ No Trakt account connected.\n\nUse /login to connect.');
         return;
       }
 
-      // Format the response
       const lines = [
         '👤 *Trakt Account Information*',
         '',
@@ -39,25 +30,40 @@ export function registerMe(bot: Bot, oauthService: OAuthService) {
         lines.push(`🔑 Trakt ID: \`${userData.userId}\``);
       }
 
-      // Format connected time
       const connectedDate = new Date(userData.createdAt).toLocaleDateString();
       lines.push(`📅 Connected: ${connectedDate}`);
 
-      // Add features available info
+      if (traktService) {
+        const accessToken = await oauthService.getValidAccessToken(telegramId);
+        if (accessToken) {
+          try {
+            const s = await traktService.getUserStats(accessToken);
+
+            if (s.available) {
+              lines.push('');
+              lines.push('📊 *Stats*');
+              lines.push(`🎬 Movies watched: *${s.moviesWatched}*`);
+              lines.push(`📺 Episodes watched: *${s.episodesWatched}*`);
+              lines.push(`⭐ Ratings given: *${s.ratingsGiven}*`);
+              lines.push('');
+              lines.push('⏱ *Total time watched*');
+              lines.push(`🎬 Movies: *${formatWatchTime(s.movieMinutes)}*`);
+              lines.push(`📺 Episodes: *${formatWatchTime(s.episodeMinutes)}*`);
+              lines.push(`📊 Total: *${formatWatchTime(s.totalMinutes)}*`);
+            } else {
+              lines.push('');
+              lines.push('⚠️ _Trakt stats unavailable right now (known Trakt-side issue)._');
+            }
+          } catch (err) {
+            logger.warn('Failed to fetch stats for /me', err);
+          }
+        }
+      }
+
       lines.push('');
-      lines.push('*Available features:*');
-      lines.push('• Watchlist');
-      lines.push('• History');
-      lines.push('• Collection');
-      lines.push('• Ratings');
-      lines.push('• Progress tracking');
-      lines.push('• Recommendations');
+      lines.push('Use /stats for detailed numbers.');
 
-      await ctx.reply(lines.join('\n'), {
-        parse_mode: 'Markdown',
-      });
-
-      logger.info('Me command response sent', { telegramId, username: userData.username });
+      await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
     } catch (error) {
       logger.error('Error in me command', error);
       await ctx.reply('❌ An error occurred while fetching your account info.');

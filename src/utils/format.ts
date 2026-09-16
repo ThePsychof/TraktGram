@@ -194,3 +194,26 @@ export function buildInlineResultDescription(item: TraktSearchItem): string {
 export function buildEmptyInlineResponse(query: string) {
   return `No Trakt matches found for "${escapeHtml(query)}". Try another movie or show title.`;
 }
+
+export function formatWatchTime(minutes: number): string {
+  if (!minutes || minutes <= 0) return '0m';
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (mins > 0) parts.push(`${mins}m`);
+  return parts.join(' ') || '0m';
+}
+
+export function formatRatingStars(rating10: number | null | undefined): string {
+  if (rating10 == null) return '—';
+  const stars = rating10 / 2;
+  const whole = Math.floor(stars);
+  const hasHalf = stars - whole >= 0.5;
+  let s = '⭐'.repeat(whole);
+  if (hasHalf) s += '½';
+  if (!s) s = '½';
+  return `${s} (${stars % 1 === 0 ? stars.toFixed(0) : stars.toFixed(1)}/5)`;
+}

@@ -66,17 +66,41 @@ export class TraktClient {
 
     const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
     const text = await res.text();
+
     if (!res.ok) {
-      logger.error('Trakt authenticated request failed', { url, status: res.status, body: text.slice(0, 1000) });
-      const err = new Error(`Trakt API returned ${res.status}`);
+      logger.error('Trakt authenticated request failed', {
+        url,
+        status: res.status,
+        statusText: res.statusText,
+        body: text.slice(0, 1000),
+      });
+      const err = new Error(
+        res.status === 429
+          ? 'Trakt is rate-limiting us. Please wait a minute and try again.'
+          : `Trakt API returned ${res.status}`,
+      );
       (err as any).status = res.status;
       throw err;
+    }
+
+    // Handle empty 2xx bodies (e.g. 204 No Content, or Trakt returning nothing)
+    if (!text || !text.trim()) {
+      logger.warn('Trakt authenticated request returned empty body', {
+        url,
+        status: res.status,
+        method,
+      });
+      return null as unknown as T;
     }
 
     try {
       return JSON.parse(text) as T;
     } catch (error) {
-      logger.error('Failed to parse JSON from authenticated Trakt response', error);
+      logger.error('Failed to parse JSON from authenticated Trakt response', {
+        url,
+        status: res.status,
+        bodySample: text.slice(0, 500),
+      });
       throw new Error('Invalid Trakt response');
     }
   }

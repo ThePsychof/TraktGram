@@ -177,8 +177,15 @@ export class OAuthService {
       throw new Error(`Failed to fetch user info: ${response.status}`);
     }
 
-    const user = (await response.json()) as TraktUser;
-    logger.info('Successfully fetched user info', { username: user.username });
+    const payload = (await response.json()) as { user?: TraktUser } & TraktUser;
+    // /users/settings returns { user: {...}, account: {...} }
+    // but some endpoints return the user object directly. Handle both.
+    const user = payload.user ?? payload;
+
+    logger.info('Successfully fetched user info', {
+      username: user?.username,
+      hasAvatar: Boolean((user as any)?.images?.avatar?.full),
+    });
 
     return user;
   }
@@ -205,6 +212,9 @@ export class OAuthService {
     const expiresAt = Date.now() + tokenData.expires_in * 1000;
 
     // Create storage object
+    const avatarUrl = (userInfo as any)?.images?.avatar?.full
+      ?? (typeof (userInfo as any)?.images?.avatar === 'string' ? (userInfo as any).images.avatar : undefined);
+
     const oauthData: StoredOAuthData = {
       telegramId,
       accessToken: tokenData.access_token,
@@ -213,6 +223,7 @@ export class OAuthService {
       createdAt: Date.now(),
       username: userInfo.username,
       userId: userInfo.ids?.trakt,
+      avatarUrl,
     };
 
     // Store in KV
@@ -272,14 +283,69 @@ export class OAuthService {
    * Get authenticated user data
    */
   async getAuthenticatedUser(telegramId: number): Promise<StoredOAuthData | null> {
-    return await this.storage.getOAuthData(telegramId);
+    const data = await this.storage.getOAuthData(telegramId);
+    if (!data) return null;
+
+    // Backfill missing profile fields (from pre-fix stored records).
+    if (!data.username || !data.avatarUrl) {
+      try {
+        const fresh = await this.getUserInfo(data.accessToken);
+        const freshAvatar = (fresh as any)?.images?.avatar?.full
+          ?? (typeof (fresh as any)?.images?.avatar === 'string' ? (fresh as any).images.avatar : undefined);
+
+        const updated: StoredOAuthData = {
+          ...data,
+          username: data.username || fresh.username,
+          avatarUrl: data.avatarUrl || freshAvatar,
+        };
+        await this.storage.storeOAuthData(updated);
+        logger.info('Backfilled stored profile', {
+          telegramId,
+          username: updated.username,
+          hasAvatar: Boolean(updated.avatarUrl),
+        });
+        return updated;
+      } catch (err) {
+        logger.warn('Failed to backfill profile', err);
+      }
+    }
+
+    return data;
   }
 
+
+  getBaseUrl(): string {
+    try {
+      return new URL(this.redirectUri).origin;
+    } catch {
+      return '';
+    }
+  }
   /**
    * Logout user by deleting their OAuth data
    */
   async logout(telegramId: number): Promise<void> {
     await this.storage.deleteOAuthData(telegramId);
     logger.info('User logged out', { telegramId });
+  }
+
+  /**
+   * Pending watch time state (short-lived, 5 min TTL)
+   */
+  async setPendingWatchTime(
+    telegramId: number,
+    pending: { type: string; id: number; title?: string },
+  ): Promise<void> {
+    await this.storage.setPendingWatchTime(telegramId, pending);
+  }
+
+  async getPendingWatchTime(
+    telegramId: number,
+  ): Promise<{ type: string; id: number; title?: string } | null> {
+    return await this.storage.getPendingWatchTime(telegramId);
+  }
+
+  async clearPendingWatchTime(telegramId: number): Promise<void> {
+    await this.storage.clearPendingWatchTime(telegramId);
   }
 }

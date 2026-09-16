@@ -1,9 +1,26 @@
 import type { Context } from 'grammy';
 import type { TraktService } from '../../services/trakt';
 import type { OAuthService } from '../../services/oauth';
-import { buildManagementKeyboard, buildRatingKeyboard } from '../menus';
-import { formatGenres, formatRating, formatTraktUrl, escapeHtml } from '../../utils/format';
+import { buildManagementKeyboard } from '../menus';
+import { formatGenres, formatRating, formatRatingStars, formatTraktUrl, escapeHtml } from '../../utils/format';
 import logger from '../../utils/logger';
+
+function formatUtcDateTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const date = d.toISOString().slice(0, 10);
+    const time = d.toISOString().slice(11, 16);
+    return `${date} ${time} UTC`;
+  } catch {
+    return iso;
+  }
+}
+
+export interface DetailsNav {
+  from?: string;
+  sid?: number;
+  sn?: number;
+}
 
 function extractPoster(item: any): string | undefined {
   const images = item.images ?? item.movie?.images ?? item.show?.images;
@@ -14,27 +31,36 @@ function extractPoster(item: any): string | undefined {
   return undefined;
 }
 
-function buildStatusLine(options: { rating?: number | null; watchlist?: boolean | null; lastWatched?: string | null; playCount?: number | null; authenticated: boolean }): string {
+function buildStatusLine(options: {
+  rating?: number | null;
+  watchlist?: boolean | null;
+  lastWatched?: string | null;
+  playCount?: number | null;
+  authenticated: boolean;
+}): string {
   const pieces: string[] = [];
-  if (options.rating != null) {
-    pieces.push(`⭐ ${formatRating(options.rating)}`);
+  if (options.rating != null) pieces.push(`⭐ ${formatRating(options.rating)}`);
+  if (options.watchlist != null) pieces.push(options.watchlist ? '📝 In Watchlist' : '📝 Not in Watchlist');
+
+  if (options.playCount != null && options.playCount > 0) {
+    const lastStr = options.lastWatched ? ` • last on ${options.lastWatched}` : '';
+    pieces.push(`👁 Watched ${options.playCount}×${lastStr}`);
+  } else if (options.lastWatched) {
+    pieces.push(`👁 Last watched ${options.lastWatched}`);
   }
-  if (options.watchlist != null) {
-    pieces.push(options.watchlist ? '📝 In Watchlist' : '📝 Not in Watchlist');
-  }
-  if (options.lastWatched) {
-    pieces.push(`👁 ${options.lastWatched}`);
-  }
-  if (typeof options.playCount === 'number') {
-    pieces.push(`🔁 ${options.playCount} plays`);
-  }
-  if (!options.authenticated) {
-    pieces.push('🔐 Connect for personalized status');
-  }
+
+  if (!options.authenticated) pieces.push('🔐 Connect for personalized status');
   return pieces.length > 0 ? pieces.join(' • ') : 'No user status available.';
 }
 
-export async function renderDetails(ctx: Context, traktService: TraktService, oauthService: OAuthService | undefined, type: string, id: number) {
+export async function renderDetails(
+  ctx: Context,
+  traktService: TraktService,
+  oauthService: OAuthService | undefined,
+  type: string,
+  id: number,
+  nav?: DetailsNav,
+) {
   try {
     const isEpisode = type === 'episode';
     const item = isEpisode
@@ -69,20 +95,25 @@ export async function renderDetails(ctx: Context, traktService: TraktService, oa
         type === 'show' ? traktService.getShowProgress(accessToken, id) : Promise.resolve(null),
       ]);
 
-      if (ratingResult.status === 'fulfilled') {
+      if (ratingResult.status === 'fulfilled' && typeof ratingResult.value === 'number') {
         userRating = ratingResult.value;
       }
       if (listResult.status === 'fulfilled') {
         watchlistStatus = listResult.value;
       }
       if (summaryResult.status === 'fulfilled' && summaryResult.value) {
-        lastWatched = summaryResult.value.last_watched_at ? new Date(summaryResult.value.last_watched_at).toISOString().slice(0, 10) : null;
-        playCount = typeof summaryResult.value.play_count === 'number' ? summaryResult.value.play_count : null;
+        const summary = summaryResult.value;
+        playCount = summary.plays > 0 ? summary.plays : null;
+        lastWatched = summary.last_watched_at
+          ? formatUtcDateTime(summary.last_watched_at)
+          : null;
       }
       if (progressResult.status === 'fulfilled' && progressResult.value) {
         const progress = progressResult.value;
         if (progress.completed_episodes != null && progress.aired_episodes != null) {
-          const percent = progress.aired_episodes > 0 ? Math.round((progress.completed_episodes / progress.aired_episodes) * 100) : 0;
+          const percent = progress.aired_episodes > 0
+            ? Math.round((progress.completed_episodes / progress.aired_episodes) * 100)
+            : 0;
           const nextEpisode = progress.next_episode;
           const nextText = nextEpisode ? `Next: S${nextEpisode.season}E${nextEpisode.number}` : 'No next episode available';
           progressSummary = `Progress: ${percent}% • ${progress.completed_episodes}/${progress.aired_episodes} episodes watched • ${nextText}`;
@@ -91,23 +122,53 @@ export async function renderDetails(ctx: Context, traktService: TraktService, oa
     }
 
     if (accessToken && isEpisode) {
-      const [ratingResult, listResult, summaryResult] = await Promise.allSettled([
-        Promise.resolve(null),
-        Promise.resolve(null),
-        Promise.resolve(null),
-      ]);
-      if (listResult.status === 'fulfilled') {
-        watchlistStatus = false;
+      try {
+        const history = await traktService.getEpisodeHistory(accessToken, id);
+        if (Array.isArray(history) && history.length > 0) {
+          const last = history[0];
+          lastWatched = last.watched_at ? formatUtcDateTime(last.watched_at) : null;
+          playCount = history.length;
+        }
+      } catch (err) {
+        logger.warn('Failed to fetch episode history', err);
       }
-      if (summaryResult.status === 'fulfilled' && summaryResult.value) {
-        lastWatched = null;
-        playCount = null;
+
+      try {
+        const rating = await traktService.getUserRating(accessToken, 'episode', id);
+        if (typeof rating === 'number') userRating = rating;
+      } catch (err) {
+        logger.warn('Failed to fetch episode rating', err);
       }
     }
 
-    const castItems = isEpisode
-      ? await traktService.getEpisodeCast(id)
-      : await traktService.getItemCast(type as 'movie' | 'show', id);
+    if (accessToken && isEpisode) {
+      try {
+        const history = await traktService.getEpisodeHistory(accessToken, id);
+        if (Array.isArray(history) && history.length > 0) {
+          const last = history[0];
+          lastWatched = last.watched_at
+            ? formatUtcDateTime(last.watched_at)
+            : null;
+          playCount = history.length;
+        }
+      } catch (err) {
+        logger.warn('Failed to fetch episode history', err);
+      }
+    }
+
+    let castItems: any[] = [];
+    try {
+      if (isEpisode) {
+        const showId = item.show?.ids?.trakt;
+        castItems = showId ? await traktService.getItemCast('show', showId) : [];
+      } else {
+        castItems = await traktService.getItemCast(type as 'movie' | 'show', id);
+      }
+    } catch (err) {
+      logger.warn('Failed to fetch cast', err);
+      castItems = [];
+    }
+
     const castList = castItems
       .filter((entry) => entry.person?.name)
       .slice(0, 6)
@@ -128,10 +189,30 @@ export async function renderDetails(ctx: Context, traktService: TraktService, oa
 
     captionLines.push('', `🎬 Cast: ${castList}`);
     captionLines.push('', `📝 <tg-spoiler>${escapeHtml(overview)}</tg-spoiler>`);
-    if (progressSummary) {
-      captionLines.push('', `📊 ${escapeHtml(progressSummary)}`);
+    if (progressSummary) captionLines.push('', `📊 ${escapeHtml(progressSummary)}`);
+
+    const personalLines: string[] = [];
+    if (userRating != null) {
+      personalLines.push(`⭐ Your rating: ${formatRatingStars(userRating)}`);
     }
-    captionLines.push('', `👤 ${buildStatusLine({ rating: userRating, watchlist: watchlistStatus, lastWatched, playCount, authenticated })}`);
+    if (watchlistStatus === true) {
+      personalLines.push('📝 In Watchlist');
+    } else if (watchlistStatus === false) {
+      personalLines.push('� Not in Watchlist');
+    }
+    if (playCount != null && playCount > 0) {
+      personalLines.push(`👁 Watched ${playCount}×`);
+    }
+    if (lastWatched) {
+      personalLines.push(`🕐 Last on ${lastWatched}`);
+    }
+    if (!authenticated) {
+      personalLines.push('🔐 Connect Trakt for personalized status');
+    }
+
+    if (personalLines.length > 0) {
+      captionLines.push('', personalLines.join('\n'));
+    }
 
     const keyboard = buildManagementKeyboard({
       type,
@@ -139,16 +220,32 @@ export async function renderDetails(ctx: Context, traktService: TraktService, oa
       inWatchlist: watchlistStatus ?? false,
       traktUrl,
       authenticated,
+      showId: type === 'show' ? id : isEpisode ? item.show?.ids?.trakt : undefined,
+      seasonNumber: isEpisode ? item.season : undefined,
+      hasNextEpisode: type === 'show' && !!progressSummary && progressSummary.includes('Next:'),
+      playCount: playCount ?? 0,
+      from: nav?.from,
     });
 
     const caption = captionLines.join('\n');
+    const { respondWith } = await import('../navigate');
     if (poster) {
-      await ctx.replyWithPhoto(poster, { caption, parse_mode: 'HTML', reply_markup: keyboard });
+      await respondWith(ctx, {
+        photo: poster,
+        caption,
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
     } else {
-      await ctx.reply(caption, { parse_mode: 'HTML', reply_markup: keyboard });
+      await respondWith(ctx, {
+        text: caption,
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
     }
   } catch (err) {
     logger.error('details render error', err);
-    await ctx.reply('Failed to load details');
+    const { respondWith } = await import('../navigate');
+    await respondWith(ctx, { text: 'Failed to load details' }).catch(() => {});
   }
 }
