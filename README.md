@@ -78,4 +78,4 @@ src/
   utils/ types/
 ```
 
-GPL3 — see `LICENSE`.
+GPL3 — see [LICENSE](https://github.com/ThePsychof/TraktGram?tab=GPL-3.0-1-ov-file).
