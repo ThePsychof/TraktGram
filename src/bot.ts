@@ -33,7 +33,7 @@ export async function createBot(
   }
 
   if (oauthService) {
-    registerLogin(bot, oauthService);
+    registerLogin(bot);
     registerMe(bot, oauthService, traktService ?? undefined);
     if (traktService) {
       registerStats(bot, traktService, oauthService);

@@ -31,7 +31,7 @@ function buildLinkPreviewOptions(posterUrl?: string): LinkPreviewOptions {
 
   return {
     url: posterUrl,
-    prefer_large_media: true,
+    prefer_large_media: false,
     show_above_text: true,
   };
 }

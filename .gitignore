@@ -3,6 +3,7 @@ node_modules/
 
 # local tooling
 .tools/
+.tgcloud/
 
 # build output
 dist/
@@ -13,8 +14,8 @@ build/
 .env
 .env.local
 
-# Cloudflare Worker output
-\.wrangler\-state/
+# Local Trakt credentials
+.traktgram-secrets.json
 
 # logs
 npm-debug.log*

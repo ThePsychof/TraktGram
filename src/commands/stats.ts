@@ -23,10 +23,7 @@ export function registerStats(bot: Bot, traktService: TraktService, oauthService
       if (!s.available) {
         await ctx.reply(
           '⚠️ *Trakt stats are unavailable right now*\n\n' +
-            'Trakt\'s stats endpoint is returning empty responses for many users. ' +
-            'This is a known issue on Trakt\'s side and is affecting multiple apps.\n\n' +
-            'Your numbers will reappear automatically once Trakt fixes it. ' +
-            'No action needed from you.',
+            'Trakt did not return your stats. Please try again later.',
           { parse_mode: 'Markdown' },
         );
         return;

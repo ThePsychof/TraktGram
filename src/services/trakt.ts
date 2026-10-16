@@ -169,26 +169,21 @@ export class TraktService {
     return user;
   }
 
-  /**
-   * Fetch stats from Trakt's documented /users/me/stats endpoint.
-   *
-   * NOTE: As of September 2026, this endpoint is returning 204 No Content
-   * for many users. This is a known bug on Trakt's side, confirmed by
-   * multiple app developers (see: Infuse, Sept 14 2026). When the endpoint
-   * returns empty, we return `available: false` so callers can show an
-   * honest message instead of fake zeros.
-   */
+  /** Fetch the authenticated user's stats using Trakt's user-specific stats route. */
   async getUserStats(accessToken: string): Promise<UserStats> {
-    let raw: any = null;
-    try {
-      raw = await this.client.requestAuth<any>(`/users/me/stats`, accessToken);
-    } catch (err: any) {
-      logger.warn('getUserStats request failed', { status: err?.status });
-      return { ...EMPTY_STATS };
+    const profile = await this.getUserProfile(accessToken);
+    const username = profile?.username;
+    if (typeof username !== 'string' || username.length === 0) {
+      throw new Error('Trakt did not return the authenticated username.');
     }
 
+    const raw = await this.client.requestAuth<any>(
+      `/users/${encodeURIComponent(username)}/stats`,
+      accessToken,
+    );
+
     if (!raw || typeof raw !== 'object') {
-      logger.warn('getUserStats returned empty (Trakt bug)');
+      logger.warn('getUserStats returned an empty response');
       return { ...EMPTY_STATS };
     }
 

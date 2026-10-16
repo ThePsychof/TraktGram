@@ -52,7 +52,7 @@ export function registerMe(bot: Bot, oauthService: OAuthService, traktService?: 
               lines.push(`📊 Total: *${formatWatchTime(s.totalMinutes)}*`);
             } else {
               lines.push('');
-              lines.push('⚠️ _Trakt stats unavailable right now (known Trakt-side issue)._');
+              lines.push('⚠️ _Trakt did not return your stats. Try again later._');
             }
           } catch (err) {
             logger.warn('Failed to fetch stats for /me', err);

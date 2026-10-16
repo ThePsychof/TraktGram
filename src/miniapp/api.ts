@@ -1,37 +1,52 @@
 import type { TraktService } from '../services/trakt';
 import type { OAuthService } from '../services/oauth';
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-  });
+export interface MiniAppApiResponse {
+  status: number;
+  body: unknown;
 }
 
-function jsonError(message: string, status = 400) {
+export interface MiniAppApiInput {
+  path: string;
+  query?: Record<string, string>;
+  method?: string;
+  telegramId: number;
+}
+
+function jsonResponse(body: unknown, status = 200): MiniAppApiResponse {
+  return { status, body };
+}
+
+function jsonError(message: string, status = 400): MiniAppApiResponse {
   return jsonResponse({ error: message }, status);
 }
 
-function parseTelegramId(request: Request, url: URL): number | null {
-  const headerValue = request.headers.get('x-telegram-user-id');
-  if (headerValue) {
-    const parsed = Number(headerValue);
-    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+function parsePathAndQuery(input: MiniAppApiInput): { pathname: string; query: Map<string, string> } {
+  const [pathWithoutHash] = input.path.split('#', 1);
+  const [pathname, search = ''] = pathWithoutHash.split('?', 2);
+  const query = new Map<string, string>();
+
+  for (const pair of search.split('&')) {
+    if (!pair) continue;
+    const [rawKey, rawValue = ''] = pair.split('=', 2);
+    const decode = (value: string) => {
+      try {
+        return decodeURIComponent(value.replace(/\+/g, ' '));
+      } catch {
+        return value;
+      }
+    };
+    query.set(decode(rawKey), decode(rawValue));
   }
 
-  const queryValue = url.searchParams.get('telegramId') ?? url.searchParams.get('telegram_id');
-  if (queryValue) {
-    const parsed = Number(queryValue);
-    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
-  }
-
-  return null;
+  for (const [key, value] of Object.entries(input.query ?? {})) query.set(key, value);
+  return { pathname, query };
 }
 
 async function requireAccessToken(
   telegramId: number,
   oauthService: OAuthService,
-): Promise<string | Response> {
+): Promise<string | MiniAppApiResponse> {
   const accessToken = await oauthService.getValidAccessToken(telegramId);
   if (!accessToken) {
     return jsonError('Authentication required. Connect via /login or the Mini App.', 401);
@@ -40,17 +55,17 @@ async function requireAccessToken(
 }
 
 export async function handleMiniAppApiRequest(
-  request: Request,
-  url: URL,
+  input: MiniAppApiInput,
   traktService: TraktService,
   oauthService?: OAuthService,
-): Promise<Response | null> {
-  const segments = url.pathname.split('/').filter(Boolean);
+): Promise<MiniAppApiResponse | null> {
+  const { pathname, query } = parsePathAndQuery(input);
+  const segments = pathname.split('/').filter(Boolean);
   if (segments.length < 3 || segments[0] !== 'api' || segments[1] !== 'miniapp') {
     return null;
   }
 
-  if (request.method !== 'GET') {
+  if (input.method && input.method !== 'GET') {
     return jsonError('Method not allowed', 405);
   }
 
@@ -60,10 +75,7 @@ export async function handleMiniAppApiRequest(
       return jsonError('OAuth not configured on backend.', 500);
     }
 
-    const telegramId = parseTelegramId(request, url);
-    if (!telegramId) {
-      return jsonError('telegramId is required', 400);
-    }
+    const telegramId = input.telegramId;
 
     const accessToken = await oauthService.getValidAccessToken(telegramId);
     if (!accessToken) {
@@ -85,9 +97,7 @@ export async function handleMiniAppApiRequest(
         (typeof profile?.images?.avatar === 'string' ? profile.images.avatar : undefined);
 
       // Proxy through our own origin so Telegram's WebView will load it.
-      const avatarUrl = rawAvatarUrl
-        ? `/api/img?u=${encodeURIComponent(rawAvatarUrl)}`
-        : null;
+      const avatarUrl = rawAvatarUrl ?? null;
 
       const recentHistory = (history ?? []).map((entry: any) => {
         const kind = entry.type;
@@ -137,19 +147,19 @@ export async function handleMiniAppApiRequest(
     const target = segments[3] ?? '';
 
     if (target === 'trending') {
-      const limit = Number(url.searchParams.get('limit') ?? '8');
+      const limit = Number(query.get('limit') ?? '8');
       const items = await traktService.getTrendingMovies(limit);
       return jsonResponse({ items });
     }
 
     if (target === 'search') {
-      const query = url.searchParams.get('q')?.trim();
-      if (!query) {
+      const searchQuery = query.get('q')?.trim();
+      if (!searchQuery) {
         return jsonError('Query parameter q is required.', 400);
       }
-      const limit = Number(url.searchParams.get('limit') ?? '20');
-      const items = await traktService.searchMulti(query, limit);
-      return jsonResponse({ query, items });
+      const limit = Number(query.get('limit') ?? '20');
+      const items = await traktService.searchMulti(searchQuery, limit);
+      return jsonResponse({ query: searchQuery, items });
     }
 
     if (target === 'item') {
@@ -175,50 +185,47 @@ export async function handleMiniAppApiRequest(
       return jsonError('OAuth not configured on backend.', 500);
     }
 
-    const telegramId = parseTelegramId(request, url);
-    if (!telegramId) {
-      return jsonError('telegramId is required in header x-telegram-user-id or query.', 400);
-    }
+    const telegramId = input.telegramId;
 
     const accessTokenOrResponse = await requireAccessToken(telegramId, oauthService);
-    if (accessTokenOrResponse instanceof Response) {
+    if (typeof accessTokenOrResponse !== 'string') {
       return accessTokenOrResponse;
     }
     const accessToken = accessTokenOrResponse;
     const target = segments[3] ?? '';
 
     if (target === 'continue') {
-      const limit = Number(url.searchParams.get('limit') ?? '50');
+      const limit = Number(query.get('limit') ?? '50');
       const items = await traktService.getContinueWatching(accessToken, limit);
       return jsonResponse({ items });
     }
 
     if (target === 'watchlist') {
-      const type = url.searchParams.get('type') ?? 'all';
-      const page = Number(url.searchParams.get('page') ?? '1');
-      const limit = Number(url.searchParams.get('limit') ?? '50');
+      const type = query.get('type') ?? 'all';
+      const page = Number(query.get('page') ?? '1');
+      const limit = Number(query.get('limit') ?? '50');
       const items = await traktService.getWatchlist(accessToken, type, page, limit);
       return jsonResponse({ items, type, page, limit });
     }
 
     if (target === 'history') {
-      const type = url.searchParams.get('type') ?? '';
-      const page = Number(url.searchParams.get('page') ?? '1');
-      const limit = Number(url.searchParams.get('limit') ?? '50');
+      const type = query.get('type') ?? '';
+      const page = Number(query.get('page') ?? '1');
+      const limit = Number(query.get('limit') ?? '50');
       const items = await traktService.getHistory(accessToken, type, page, limit);
       return jsonResponse({ items, type, page, limit });
     }
 
     if (target === 'recommendations') {
-      const type = url.searchParams.get('type') ?? 'movies';
-      const page = Number(url.searchParams.get('page') ?? '1');
-      const limit = Number(url.searchParams.get('limit') ?? '20');
+      const type = query.get('type') ?? 'movies';
+      const page = Number(query.get('page') ?? '1');
+      const limit = Number(query.get('limit') ?? '20');
       const items = await traktService.getRecommendations(accessToken, type, page, limit);
       return jsonResponse({ items, type, page, limit });
     }
 
     if (target === 'calendar') {
-      const days = Number(url.searchParams.get('days') ?? '7');
+      const days = Number(query.get('days') ?? '7');
       const [shows, movies] = await Promise.all([
         traktService.getCalendarShows(accessToken, days),
         traktService.getCalendarMovies(accessToken, days),
@@ -242,9 +249,9 @@ export async function handleMiniAppApiRequest(
     }
 
     if (target === 'collection') {
-      const type = url.searchParams.get('type') ?? 'all';
-      const page = Number(url.searchParams.get('page') ?? '1');
-      const limit = Number(url.searchParams.get('limit') ?? '50');
+      const type = query.get('type') ?? 'all';
+      const page = Number(query.get('page') ?? '1');
+      const limit = Number(query.get('limit') ?? '50');
       const items = await traktService.getCollection(accessToken, type, page, limit);
       return jsonResponse({ items, type, page, limit });
     }

@@ -34,17 +34,23 @@ export function renderMiniAppPage(_deepLink?: string): string {
   </div>
   <script>
     var webApp = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+    var card = document.getElementById('card');
+    var oauthParams = new URLSearchParams(location.search);
+    var hasOAuthResponse = ['code', 'state', 'error', 'error_description'].some(function (key) {
+      return oauthParams.has(key);
+    });
+    var isLoginLaunch = location.pathname === '/' && webApp && webApp.initDataUnsafe
+      && webApp.initDataUnsafe.start_param === 'login';
     if (webApp) {
       try { webApp.expand(); } catch (e) {}
       try { if (webApp.setHeaderColor) webApp.setHeaderColor('#0a0a0a'); } catch (e) {}
     }
 
+    if (isLoginLaunch && !hasOAuthResponse) {
+      location.replace('/auth/start');
+    }
+
     function getTelegramId() {
-      try {
-        var q = new URLSearchParams(location.search);
-        var fromQuery = q.get('telegramId');
-        if (fromQuery) return fromQuery;
-      } catch (e) {}
       try {
         var u = webApp && webApp.initDataUnsafe && webApp.initDataUnsafe.user;
         if (u && u.id) return String(u.id);
@@ -61,6 +67,50 @@ export function renderMiniAppPage(_deepLink?: string): string {
         }
       } catch (e) {}
       return null;
+    }
+
+    function callEndpoint(name, input) {
+      return new Promise(function (resolve, reject) {
+        if (!webApp || !webApp.Serverless) {
+          reject(new Error('Open this from the Telegram Mini App.'));
+          return;
+        }
+        webApp.Serverless.call(name, input, function (error, result) {
+          if (error) reject(error);
+          else resolve(result);
+        });
+      });
+    }
+
+    function finishOAuthCallback() {
+      var code = oauthParams.get('code');
+      var state = oauthParams.get('state');
+      var error = oauthParams.get('error');
+      history.replaceState(null, '', '/');
+
+      if (error) {
+        card.innerHTML = '<div class="error">'
+          + (error === 'access_denied'
+            ? 'Trakt sign-in was cancelled. Reopen /login to try again.'
+            : 'Trakt returned an authorization error. Check your Trakt app settings.')
+          + '</div>';
+        return;
+      }
+      if (!code || !state) {
+        card.innerHTML = '<div class="error">Trakt returned without the required authorization details. Verify the redirect URI in your Trakt app settings.</div>';
+        return;
+      }
+
+      card.innerHTML = '<div class="loading">Finishing Trakt connection…</div>';
+      callEndpoint('oauthCallback', { code: code, state: state })
+        .then(function () {
+          card.innerHTML = '<div class="name">Your Trakt account is connected.</div>'
+            + '<div class="handle">Return to the TraktGram bot to continue.</div>';
+          if (webApp && webApp.close) webApp.close();
+        })
+        .catch(function (err) {
+          card.innerHTML = '<div class="error">' + esc(err && err.message ? err.message : 'Trakt login failed.') + '</div>';
+        });
     }
 
     function esc(s) {
@@ -91,19 +141,8 @@ export function renderMiniAppPage(_deepLink?: string): string {
         card.innerHTML = '<div class="error">Open this from inside Telegram.</div>';
         return;
       }
-      fetch('/api/miniapp/me', { headers: { 'x-telegram-user-id': tgId } })
-        .then(function (res) {
-          return res.text().then(function (text) {
-            var data = null;
-            try { data = JSON.parse(text); } catch (e) {}
-            if (!res.ok) {
-              var msg = (data && data.error) ? data.error : ('HTTP ' + res.status);
-              card.innerHTML = '<div class="error">' + esc(msg) + '</div>';
-              return;
-            }
-            render(card, data);
-          });
-        })
+      callEndpoint('miniappApi', { path: '/api/miniapp/me', method: 'GET' })
+        .then(function (data) { render(card, data); })
         .catch(function (err) {
           var msg = (err && err.message) ? err.message : 'unknown error';
           card.innerHTML = '<div class="error">Request failed: ' + esc(msg) + '</div>';
@@ -134,7 +173,7 @@ export function renderMiniAppPage(_deepLink?: string): string {
       if (stats.available === false) {
         statHtml = '<div class="stat"><div class="stat-label">Total watched</div>'
           + '<div class="stat-unavailable">⚠️ Trakt stats are temporarily unavailable.<br>'
-          + 'This is a known issue on Trakt\\'s side.</div></div>';
+          + 'Please try again later.</div></div>';
       } else {
         statHtml = '<div class="stat"><div class="stat-label">Total watched</div>'
           + '<div class="stat-value">' + formatTime(wt.total) + '</div>'
@@ -162,7 +201,8 @@ export function renderMiniAppPage(_deepLink?: string): string {
         + histHtml;
     }
 
-    load();
+    if (hasOAuthResponse) finishOAuthCallback();
+    else if (!isLoginLaunch) load();
   </script>
 </body>
 </html>`;

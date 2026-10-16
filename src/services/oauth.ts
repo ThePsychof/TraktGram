@@ -9,6 +9,12 @@ import type {
 import type { StorageService } from './storage';
 import logger from '../utils/logger';
 
+function encodeQuery(params: Record<string, string>): string {
+  return Object.entries(params)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join('&');
+}
+
 /**
  * OAuthService: Handles complete OAuth 2.0 flow with Trakt
  * - Generates secure state parameters
@@ -63,14 +69,14 @@ export class OAuthService {
   async generateAuthorizationUrl(telegramId: number): Promise<string> {
     const state = await this.createOAuthState(telegramId);
 
-    const params = new URLSearchParams({
+    const params = encodeQuery({
       response_type: 'code',
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
       state,
     });
 
-    return `${this.TRAKT_AUTH_URL}?${params.toString()}`;
+    return `${this.TRAKT_AUTH_URL}?${params}`;
   }
 
   /**
@@ -193,11 +199,17 @@ export class OAuthService {
   /**
    * Complete OAuth flow: validate state, exchange code, get user info, store data
    */
-  async handleCallback(params: OAuthCallbackParams): Promise<StoredOAuthData> {
+  async handleCallback(
+    params: OAuthCallbackParams,
+    expectedTelegramId?: number,
+  ): Promise<StoredOAuthData> {
     // Validate state parameter (CSRF protection)
     const telegramId = await this.storage.verifyOAuthState(params.state);
     if (!telegramId) {
       throw new Error('Invalid or expired state parameter');
+    }
+    if (expectedTelegramId !== undefined && telegramId !== expectedTelegramId) {
+      throw new Error('OAuth state belongs to a different Telegram user');
     }
 
     logger.info('Processing OAuth callback', { telegramId });
@@ -315,11 +327,7 @@ export class OAuthService {
 
 
   getBaseUrl(): string {
-    try {
-      return new URL(this.redirectUri).origin;
-    } catch {
-      return '';
-    }
+    return this.redirectUri.match(/^(https:\/\/[^/]+)/)?.[1] ?? '';
   }
   /**
    * Logout user by deleting their OAuth data

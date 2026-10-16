@@ -46,7 +46,7 @@ export async function renderProfile(ctx: Context, oauthService: OAuthService, tr
       lines.push(`⏱ Total watched: <b>${formatWatchTime(stats.totalMinutes)}</b>`);
     } else {
       lines.push('');
-      lines.push('⚠️ <i>Trakt stats are temporarily unavailable (known issue on Trakt\'s side).</i>');
+      lines.push('⚠️ <i>Trakt did not return your stats. Try again later.</i>');
     }
 
     lines.push('');

@@ -7,8 +7,14 @@ export interface PendingWatchTime {
   title?: string;
 }
 
+export interface KeyValueStore {
+  get(key: string, type: 'json'): Promise<unknown>;
+  put(key: string, value: string, options?: { expirationTtl: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
 export class StorageService {
-  constructor(public readonly kv: KVNamespace) {
+  constructor(public readonly kv: KeyValueStore) {
     if (!this.kv) {
       logger.warn('KV namespace not initialized - storage will not persist');
     }

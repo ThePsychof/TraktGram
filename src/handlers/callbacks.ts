@@ -6,6 +6,8 @@ import { buildRatingKeyboard } from '../ui/menus';
 import logger from '../utils/logger';
 import { decodeCallback, encodeCallback } from '../utils/callbackData';
 
+const MINI_APP_URL = 'https://t.me/TraktGram_bot?startapp=login';
+
 export function registerCallbackHandlers(
   bot: Bot,
   traktService: TraktService,
@@ -81,14 +83,9 @@ export function registerCallbackHandlers(
           return;
         }
         try {
-          const state = await oauthService.createOAuthState(ctx.from.id);
-          const base = oauthService.getBaseUrl();
-          const pageUrl = `${base}/auth/start?state=${encodeURIComponent(state)}`;
-          const { InlineKeyboard } = await import('grammy');
-          const keyboard = new InlineKeyboard().url('🔐 Connect Trakt', pageUrl);
           await ctx.reply(
             '🔐 Connect your Trakt account\n\nTap the button below to choose how you want to sign in.',
-            { reply_markup: keyboard },
+            { reply_markup: { inline_keyboard: [[{ text: '🔐 Connect Trakt', url: MINI_APP_URL }]] } },
           );
           await ctx.answerCallbackQuery();
         } catch (err) {
@@ -487,7 +484,7 @@ export function registerCallbackHandlers(
           if (!s.available) {
             await ctx.reply(
               '⚠️ Trakt stats are unavailable right now.\n\n' +
-                'This is a known issue on Trakt\'s side. Your numbers will return automatically.',
+                'Trakt did not return your stats. Please try again later.',
             );
             await ctx.answerCallbackQuery();
             return;
