@@ -104,4 +104,11 @@ export class TraktClient {
       throw new Error('Invalid Trakt response');
     }
   }
+
+  async debugAuth(path: string, accessToken: string): Promise<string> {
+    const res = await fetch(`${this.base}${path}`, { headers: this.getAuthHeaders(accessToken) });
+    const text = await res.text();
+    return `${res.status} ${res.headers.get('content-type')} len=${text.length} ${text.slice(0, 200)}`;
+  }
+
 }

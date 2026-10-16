@@ -47,7 +47,7 @@ export function registerStats(bot: Bot, traktService: TraktService, oauthService
       await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
     } catch (err) {
       logger.error('Error in /stats command', err);
-      await ctx.reply('❌ Failed to load stats. Try again later.');
+      await ctx.reply(`❌ Failed to load stats: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
 }

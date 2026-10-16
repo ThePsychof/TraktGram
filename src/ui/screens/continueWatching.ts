@@ -17,15 +17,13 @@ export async function renderContinueWatching(ctx: Context, traktService: TraktSe
   }
 
   try {
-    const items = await traktService.getContinueWatching(accessToken, 50);
-    if (!items || items.length === 0) {
-      await ctx.reply('No items to continue watching right now.');
+    const found = await traktService.getContinueAt(accessToken, Math.max(0, page - 1));
+    if (!found) {
+      await ctx.reply('No more items to continue watching.');
       return;
     }
-
-    const total = items.length;
-    const idx = Math.max(0, Math.min(total - 1, page - 1));
-    const item = items[idx];
+    const { item, index: idx, total } = found;
+    page = idx + 1;
 
     const title = item.show?.title ?? item.movie?.title ?? item.title ?? 'Unknown';
     const episode = item.episode;
@@ -33,7 +31,8 @@ export async function renderContinueWatching(ctx: Context, traktService: TraktSe
 
     const poster = extractPoster(item) ?? undefined;
 
-    const caption = `📺 ${title}${subtitle ? `\nNext: ${subtitle}` : ''}\n\n${idx + 1}/${total}`;
+    const prog = item.progress?.aired ? `\n${item.progress.completed}/${item.progress.aired} episodes watched` : '';
+    const caption = `📺 ${title}${subtitle ? `\nNext: ${subtitle}` : ''}${prog}\n\n${idx + 1}/${total}`;
 
     // Build actions with item-specific ids
     const itemType = item.movie ? 'movie' : item.show ? 'show' : item.type ?? '';
@@ -54,5 +53,76 @@ export async function renderContinueWatching(ctx: Context, traktService: TraktSe
   } catch (error) {
     logger.error('Error rendering Continue Watching', error);
     await ctx.reply('Failed to load Continue Watching. Try again later.');
+  }
+}
+
+export async function renderContinueList(
+  ctx: Context,
+  traktService: TraktService,
+  oauthService: OAuthService,
+  edit = false,
+) {
+  const telegramId = ctx.from?.id;
+  if (!telegramId) return;
+
+  const accessToken = await oauthService.getValidAccessToken(telegramId);
+  if (!accessToken) {
+    await ctx.reply('🔐 Please connect your Trakt account first.', {
+      reply_markup: { inline_keyboard: [[{ text: '🔐 Connect Trakt', callback_data: encodeCallback('connect') }]] },
+    });
+    return;
+  }
+
+  try {
+    const candidates = (await traktService.getContinueCandidates(accessToken)).slice(0, 15);
+    const allProgress = await Promise.all(
+      candidates.map((w) => traktService.getContinueProgress(accessToken, w.show.ids.trakt)),
+    );
+    const shows: any[] = [];
+    const progresses: any[] = [];
+    candidates.forEach((w, i) => {
+      if (allProgress[i]?.next_episode && shows.length < 10) {
+        shows.push(w);
+        progresses.push(allProgress[i]);
+      }
+    });
+    if (shows.length === 0) {
+      await ctx.reply('No unfinished shows found.');
+      return;
+    }
+
+    const rows: any[] = [];
+    shows.forEach((w, i) => {
+      const next = progresses[i]?.next_episode;
+      const year = w.show?.year ? ` (${w.show.year})` : '';
+      const row: any[] = [{
+        text: `📺 ${String(w.show?.title ?? 'Unknown').slice(0, 28)}${year}`,
+        callback_data: encodeCallback('next_ep', { id: w.show.ids.trakt }),
+      }];
+      if (next?.ids?.trakt) {
+        const s = String(next.season ?? 0).padStart(2, '0');
+        const e = String(next.number ?? 0).padStart(2, '0');
+        row.push({
+          text: `✅ S${s}E${e}`,
+          callback_data: encodeCallback('cw_watched', { e: next.ids.trakt, id: w.show.ids.trakt }),
+        });
+      }
+      rows.push(row);
+    });
+    rows.push([{ text: '🏠 Home', callback_data: encodeCallback('home') }]);
+
+    const text = '▶️ Continue Watching\n\nTap a show for its next episode, or ✅ to mark it watched:';
+    if (edit) {
+      try {
+        await ctx.editMessageText(text, { reply_markup: { inline_keyboard: rows } });
+        return;
+      } catch {
+        // fall through to a new message
+      }
+    }
+    await ctx.reply(text, { reply_markup: { inline_keyboard: rows } });
+  } catch (error) {
+    logger.error('Error rendering Continue list', error);
+    await ctx.reply('Failed to load your recent shows. Try again later.');
   }
 }

@@ -101,13 +101,80 @@ export class TraktService {
     return await this.client.requestAuth<any[]>(`/sync/playback/movies?extended=full,images`, accessToken);
   }
 
-  async getContinueWatching(accessToken: string, limit = 20): Promise<any[]> {
-    const [episodes, movies] = await Promise.all([
-      this.getPlaybackEpisodes(accessToken),
-      this.getPlaybackMovies(accessToken),
-    ]);
-    const combined = [...(episodes || []), ...(movies || [])];
-    return combined.slice(0, limit);
+  async getContinueCandidates(accessToken: string): Promise<any[]> {
+    const key = `continue:cand:${accessToken.slice(-12)}`;
+    const cached = this.cache.get<any[]>(key);
+    if (cached) return cached;
+
+    const history = await this.client.requestAuth<any[]>(
+      `/sync/history/episodes?limit=40&extended=images`,
+      accessToken,
+    );
+    const seen = new Set<number>();
+    const shows: any[] = [];
+    for (const h of Array.isArray(history) ? history : []) {
+      const id = h?.show?.ids?.trakt;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      shows.push({ show: h.show, last_watched_at: h.watched_at });
+    }
+    this.cache.set(key, shows, 60 * 5);
+    return shows;
+  }
+
+  async getContinueProgress(accessToken: string, showId: number, force = false): Promise<any | null> {
+    const key = `continue:prog:${accessToken.slice(-12)}:${showId}`;
+    if (!force) {
+      const cached = this.cache.get<any>(key);
+      if (cached) return cached;
+    }
+    const p = await this.getShowProgress(accessToken, showId).catch(() => null);
+    if (p) this.cache.set(key, p, 60 * 5);
+    return p;
+  }
+
+  /** Finds the first show at or after `from` that still has an unwatched episode. */
+  async getContinueAt(
+    accessToken: string,
+    from = 0,
+  ): Promise<{ item: any; index: number; total: number } | null> {
+    const cands = await this.getContinueCandidates(accessToken);
+    for (let i = from; i < Math.min(cands.length, from + 5); i++) {
+      const w = cands[i];
+      const key = `continue:prog:${accessToken.slice(-12)}:${w.show.ids.trakt}`;
+      let p = this.cache.get<any>(key);
+      if (!p) {
+        p = await this.getShowProgress(accessToken, w.show.ids.trakt).catch(() => null);
+        if (p) this.cache.set(key, p, 60 * 5);
+      }
+      if (p?.next_episode) {
+        return {
+          index: i,
+          total: cands.length,
+          item: {
+            type: 'episode',
+            show: w.show,
+            episode: p.next_episode,
+            progress: { aired: p.aired ?? 0, completed: p.completed ?? 0 },
+            last_watched_at: w.last_watched_at,
+          },
+        };
+      }
+    }
+    return null;
+  }
+
+  // Used by the mini app route
+  async getContinueWatching(accessToken: string, limit = 8): Promise<any[]> {
+    const out: any[] = [];
+    let i = 0;
+    while (out.length < limit) {
+      const f = await this.getContinueAt(accessToken, i);
+      if (!f) break;
+      out.push(f.item);
+      i = f.index + 1;
+    }
+    return out;
   }
 
   async addHistoryEntry(accessToken: string, payload: any): Promise<any> {
@@ -171,20 +238,34 @@ export class TraktService {
 
   /** Fetch the authenticated user's stats using Trakt's user-specific stats route. */
   async getUserStats(accessToken: string): Promise<UserStats> {
-    const profile = await this.getUserProfile(accessToken);
-    const username = profile?.username;
-    if (typeof username !== 'string' || username.length === 0) {
-      throw new Error('Trakt did not return the authenticated username.');
+    let raw: any = null;
+    let lastError: unknown = null;
+
+    try {
+      raw = await this.client.requestAuth<any>(`/users/me/stats`, accessToken);
+    } catch (e) {
+      lastError = e;
     }
 
-    const raw = await this.client.requestAuth<any>(
-      `/users/${encodeURIComponent(username)}/stats`,
-      accessToken,
-    );
+    if (!raw || typeof raw !== 'object') {
+      try {
+        const profile = await this.getUserProfile(accessToken);
+        const username = profile?.username;
+        if (typeof username === 'string' && username) {
+          raw = await this.client.requestAuth<any>(
+            `/users/${encodeURIComponent(username)}/stats`,
+            accessToken,
+          );
+        }
+      } catch (e) {
+        lastError = e;
+      }
+    }
 
     if (!raw || typeof raw !== 'object') {
-      logger.warn('getUserStats returned an empty response');
-      return { ...EMPTY_STATS };
+      if (lastError instanceof Error) throw lastError;
+      const dbg = await this.client.debugAuth(`/users/me/stats`, accessToken).catch((e) => String(e));
+      throw new Error(`empty stats response -> ${dbg}`);
     }
 
     const movieMinutes = raw?.movies?.minutes ?? 0;

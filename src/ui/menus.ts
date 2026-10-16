@@ -11,6 +11,10 @@ export function buildMainMenu(isAuthenticated: boolean): InlineKeyboardMarkup {
 
   if (isAuthenticated) {
     rows.push([
+      { text: '▶️ Continue Watching', callback_data: 'a:continue' },
+      { text: '📊 Stats', callback_data: 'a:stats' },
+    ]);
+    rows.push([
       { text: '📜 History', callback_data: 'a:history' },
       { text: '👤 Profile', callback_data: 'a:account' },
     ]);

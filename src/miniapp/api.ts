@@ -195,7 +195,7 @@ export async function handleMiniAppApiRequest(
     const target = segments[3] ?? '';
 
     if (target === 'continue') {
-      const limit = Number(query.get('limit') ?? '50');
+      const limit = Number(query.get('limit') ?? '8');
       const items = await traktService.getContinueWatching(accessToken, limit);
       return jsonResponse({ items });
     }

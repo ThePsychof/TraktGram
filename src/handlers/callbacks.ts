@@ -523,6 +523,53 @@ export function registerCallbackHandlers(
         return;
       }
 
+      if (action === 'cw_watched') {
+        if (!oauthService || !ctx.from) {
+          await ctx.answerCallbackQuery({ text: 'Not authenticated', show_alert: true });
+          return;
+        }
+        const accessToken = await oauthService.getValidAccessToken(ctx.from.id);
+        if (!accessToken) {
+          await ctx.answerCallbackQuery({ text: 'Please connect Trakt first', show_alert: true });
+          return;
+        }
+        const episodeId = Number(params.e);
+        const showId = Number(params.id);
+        if (!episodeId || !showId) {
+          await ctx.answerCallbackQuery({ text: 'Invalid episode', show_alert: true });
+          return;
+        }
+        try {
+          await traktService.addHistoryEntry(accessToken, { episodes: [{ ids: { trakt: episodeId } }] });
+          await traktService.getContinueProgress(accessToken, showId, true);
+          await ctx.answerCallbackQuery({ text: '✅ Marked as watched' });
+          const { renderContinueList } = await import('../ui/screens/continueWatching');
+          await renderContinueList(ctx, traktService, oauthService, true);
+        } catch (err) {
+          logger.error('cw_watched error', err);
+          await ctx.answerCallbackQuery({ text: 'Failed to mark watched', show_alert: true });
+        }
+        return;
+      }
+
+      if (action === 'continue') {
+        if (!oauthService) {
+          await ctx.answerCallbackQuery({ text: 'OAuth not configured', show_alert: true });
+          return;
+        }
+        if (!params.page) {
+          const { renderContinueList } = await import('../ui/screens/continueWatching');
+          await renderContinueList(ctx, traktService, oauthService);
+          await ctx.answerCallbackQuery();
+          return;
+        }
+        const page = Number(params.page);
+        const { renderContinueWatching } = await import('../ui/screens/continueWatching');
+        await renderContinueWatching(ctx, traktService, oauthService, page);
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
       await ctx.answerCallbackQuery({ text: 'Action not implemented yet' });
     } catch (err) {
       logger.error('callback fallback error', err);
